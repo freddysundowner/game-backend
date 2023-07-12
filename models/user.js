@@ -12,6 +12,10 @@ const user = new mongoose.Schema({
     type: Number,
     default: 1000
   },
+  phonenumber: {
+    type: String,
+    required: true
+  },
   bet_amount: {
     type: Number,
     default: 0

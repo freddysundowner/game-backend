@@ -31,36 +31,38 @@ const io = new Server(server, {
 });
 // var currentConnections = {};
 
+const messages_list = [];
+let live_bettors_table = [];
+let betting_phase = false;
+let game_phase = false;
+let cashout_phase = true;
+let game_crash_value = -69;
+let sent_cashout = true;
+let active_player_id_list = [];
 io.on("connection", async (socket) => {
-  socket.on("clicked", (data) => {});
+  socket.on("clicked", (data) => { });
   console.log("live_bettors_table", live_bettors_table);
   // currentConnections[socket.id] = { socket: socket };
 
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
+  // console.log(theLoop);
   socket.on("bet", async (data) => {
     var bet_amount = data.bet_amount;
     var payout_multiplier = data.payout_multiplier;
     var userid = data.userid;
     var username = data.username;
     if (!betting_phase) {
-      //res.status(400).json({ customError: "IT IS NOT THE BETTING PHASE" });
       console.log({ customError: "IT IS NOT THE BETTING PHASE" });
       return;
     }
     if (isNaN(bet_amount) == true || isNaN(payout_multiplier) == true) {
-      // res.status(400).json({ customError: "Not a number" });
       console.log({ customError: "Not a number" });
       return;
     }
     bDuplicate = false;
-    // playerIdList = theLoop.active_player_id_list;
-    let now = Date.now();
     for (var i = 0; i < live_bettors_table.length; i++) {
       if (live_bettors_table[i] === userid) {
         console.log({ customError: "You are already betting this round" });
-        // res
-        //   .status(400)
-        //   .json({ customError: "You are already betting this round" });
         bDuplicate = true;
         break;
       }
@@ -69,24 +71,23 @@ io.on("connection", async (socket) => {
       return;
     }
     thisUser = await User.findById(userid);
-    // console.log(thisUser);
+    console.log(thisUser);
     if (bet_amount > thisUser.balance) {
-      // res.status(400).json({ customError: "Bet too big" });
       return;
     }
 
     info_json = {
       the_user_id: userid,
-      userdata: thisUser,
-      the_username: username,
+      the_username: thisUser.username,
       bet_amount: bet_amount,
+      userdata: thisUser,
       cashout_multiplier: null,
       profit: null,
       b_bet_live: true,
       payout_multiplier,
       balance: thisUser.balance - bet_amount,
     };
-    console.log(info_json);
+    // console.log(info_json);
     live_bettors_table.push(info_json);
     io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
     io.emit("success_betting", info_json);
@@ -101,50 +102,46 @@ io.on("connection", async (socket) => {
     await Game_loop.findByIdAndUpdate(GAME_LOOP_ID, {
       $push: { active_player_id_list: userid },
     });
-    // res.json(`Bet placed for ${req.user.username}`);
   });
 
   socket.on("auto_cashout_early", async (data) => {
+    console.log("auto_cashout_early", data);
     var userid = data.userid;
     var payout_multiplier = data.payout_multiplier;
     if (!game_phase) {
       return;
     }
-    theLoop = await Game_loop.findById(GAME_LOOP_ID);
     let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
     if (
-      payout_multiplier <= game_crash_value &&
-      theLoop.active_player_id_list.includes(userid)
+      payout_multiplier <= game_crash_value
     ) {
-      const currUser = await User.findById(userid);
-      currUser.balance += currUser.bet_amount * currUser.payout_multiplier;
-      await currUser.save();
-      await theLoop.updateOne({
-        $pull: { active_player_id_list: userid },
-      });
       for (const bettorObject of live_bettors_table) {
         if (bettorObject.the_user_id === userid) {
-          bettorObject.cashout_multiplier = currUser.payout_multiplier;
+          bettorObject.cashout_multiplier = bettorObject.payout_multiplier;
           bettorObject.profit =
-            currUser.bet_amount * current_multiplier - currUser.bet_amount;
+            bettorObject.bet_amount * current_multiplier - bettorObject.bet_amount;
           bettorObject.b_bet_live = false;
           io.emit(
             "receive_live_betting_table",
             JSON.stringify(live_bettors_table)
           );
 
+          socket.emit("auto_cashout_early", bettorObject);
+          const currUser = await User.findById(userid);
+          currUser.balance += bettorObject.bet_amount * bettorObject.payout_multiplier;
+          await currUser.save();
+          await theLoop.updateOne({
+            $pull: { active_player_id_list: userid },
+          });
+
           break;
         }
       }
-      socket.emit("auto_cashout_early", currUser);
     }
   });
   socket.on("manual_cashout_early", async (data) => {
     var userid = data.userid;
-    console.log("manual_cashout_early", current_multiplier);
-    console.log(game_phase);
-    console.log(live_bettors_table);
     if (!game_phase) {
       return;
     }
@@ -152,7 +149,6 @@ io.on("connection", async (socket) => {
     let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
     if (current_multiplier <= game_crash_value) {
-      console.log("live_bettors_table", live_bettors_table);
       for (const bettorObject of live_bettors_table) {
         if (bettorObject.the_user_id === userid) {
           bettorObject.cashout_multiplier = current_multiplier;
@@ -169,9 +165,9 @@ io.on("connection", async (socket) => {
           currUser.balance += currUser.bet_amount * current_multiplier;
           await currUser.save();
           // active_player_id_list.
-          // await theLoop.updateOne({
-          //   $pull: { active_player_id_list: userid },
-          // });
+          await theLoop.updateOne({
+            $pull: { active_player_id_list: userid },
+          });
 
           break;
         }
@@ -183,7 +179,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(3000, () => {});
+server.listen(3000, () => { });
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -231,8 +227,13 @@ app.post("/register", (req, res) => {
   if (req.body.username.length < 3 || req.body.password < 3) {
     return;
   }
+  console.log(req.body);
+  if (req.body.phonenumber == "") {
+    res.send("Phone numner is required");
+    return;
+  }
 
-  User.findOne({ username: req.body.username }, async (err, doc) => {
+  User.findOne({ username: req.body.username, phonenumber: req.body.phonenumber }, async (err, doc) => {
     if (err) throw err;
     if (doc) res.send("Username already exists");
     if (!doc) {
@@ -241,6 +242,7 @@ app.post("/register", (req, res) => {
       const newUser = new User({
         username: req.body.username,
         password: hashedPassword,
+        phonenumber: req.body.phonenumber,
       });
       await newUser.save();
       res.send("Loading...");
@@ -494,7 +496,7 @@ function checkNotAuthenticated(req, res, next) {
   next();
 }
 
-app.listen(5000, () => {});
+app.listen(5000, () => { });
 
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
@@ -517,13 +519,6 @@ const pat = setInterval(async () => {
   await loopUpdate();
 }, 1000);
 
-const messages_list = [];
-let live_bettors_table = [];
-let betting_phase = false;
-let game_phase = false;
-let cashout_phase = true;
-let game_crash_value = -69;
-let sent_cashout = true;
 
 // Game Loop
 const loopUpdate = async () => {
@@ -580,12 +575,12 @@ const loopUpdate = async () => {
         game_crash_value = Math.round(game_crash_value * 100) / 100;
       }
       io.emit("update_user");
-      let theLoop = await Game_loop.findById(GAME_LOOP_ID);
-      // console.log(theLoop);
-      io.emit("crash_history", theLoop.previous_crashes);
-      io.emit("get_round_id_list", theLoop.round_id_list);
       io.emit("start_betting_phase");
       io.emit("testingvariable");
+      let theLoop = await Game_loop.findById(GAME_LOOP_ID);
+      io.emit("crash_history", theLoop.previous_crashes);
+      io.emit("get_round_id_list", theLoop.round_id_list);
+      // console.log(theLoop);
       live_bettors_table = [];
       phase_start_time = Date.now();
     }
