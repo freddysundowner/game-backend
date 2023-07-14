@@ -41,16 +41,14 @@ let sent_cashout = true;
 let active_player_id_list = [];
 io.on("connection", async (socket) => {
   socket.on("clicked", (data) => { });
-  console.log("live_bettors_table", live_bettors_table);
-  // currentConnections[socket.id] = { socket: socket };
 
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // console.log(theLoop);
   socket.on("bet", async (data) => {
+    console.log("bet data", data);
     var bet_amount = data.bet_amount;
     var payout_multiplier = data.payout_multiplier;
     var userid = data.userid;
-    var username = data.username;
     if (!betting_phase) {
       console.log({ customError: "IT IS NOT THE BETTING PHASE" });
       return;
@@ -61,7 +59,7 @@ io.on("connection", async (socket) => {
     }
     bDuplicate = false;
     for (var i = 0; i < live_bettors_table.length; i++) {
-      if (live_bettors_table[i] === userid) {
+      if (live_bettors_table[i].the_user_id === userid) {
         console.log({ customError: "You are already betting this round" });
         bDuplicate = true;
         break;
@@ -71,8 +69,12 @@ io.on("connection", async (socket) => {
       return;
     }
     thisUser = await User.findById(userid);
-    console.log(thisUser);
+    if (!thisUser) {
+      console.log("ERROR BETTING");
+      return;
+    }
     if (bet_amount > thisUser.balance) {
+      console.log("NO ENOUGH MONEY IN THE WALLET");
       return;
     }
 
@@ -87,7 +89,6 @@ io.on("connection", async (socket) => {
       payout_multiplier,
       balance: thisUser.balance - bet_amount,
     };
-    // console.log(info_json);
     live_bettors_table.push(info_json);
     io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
     io.emit("success_betting", info_json);
@@ -104,42 +105,42 @@ io.on("connection", async (socket) => {
     });
   });
 
-  socket.on("auto_cashout_early", async (data) => {
-    console.log("auto_cashout_early", data);
-    var userid = data.userid;
-    var payout_multiplier = data.payout_multiplier;
-    if (!game_phase) {
-      return;
-    }
-    let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
-    current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
-    if (
-      payout_multiplier <= game_crash_value
-    ) {
-      for (const bettorObject of live_bettors_table) {
-        if (bettorObject.the_user_id === userid) {
-          bettorObject.cashout_multiplier = bettorObject.payout_multiplier;
-          bettorObject.profit =
-            bettorObject.bet_amount * current_multiplier - bettorObject.bet_amount;
-          bettorObject.b_bet_live = false;
-          io.emit(
-            "receive_live_betting_table",
-            JSON.stringify(live_bettors_table)
-          );
+  // socket.on("auto_cashout_early", async (data) => {
+  //   console.log("auto_cashout_early", data);
+  //   var userid = data.userid;
+  //   var payout_multiplier = data.payout_multiplier;
+  //   if (!game_phase) {
+  //     return;
+  //   }
+  //   let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
+  //   current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
+  //   if (
+  //     payout_multiplier <= game_crash_value
+  //   ) {
+  //     for (const bettorObject of live_bettors_table) {
+  //       if (bettorObject.the_user_id === userid) {
+  //         bettorObject.cashout_multiplier = bettorObject.payout_multiplier;
+  //         bettorObject.profit =
+  //           bettorObject.bet_amount * current_multiplier - bettorObject.bet_amount;
+  //         bettorObject.b_bet_live = false;
+  //         io.emit(
+  //           "receive_live_betting_table",
+  //           JSON.stringify(live_bettors_table)
+  //         );
 
-          socket.emit("auto_cashout_early", bettorObject);
-          const currUser = await User.findById(userid);
-          currUser.balance += bettorObject.bet_amount * bettorObject.payout_multiplier;
-          await currUser.save();
-          await theLoop.updateOne({
-            $pull: { active_player_id_list: userid },
-          });
+  //         socket.emit("auto_cashout_early", bettorObject);
+  //         const currUser = await User.findById(userid);
+  //         currUser.balance += bettorObject.bet_amount * bettorObject.payout_multiplier;
+  //         await currUser.save();
+  //         await theLoop.updateOne({
+  //           $pull: { active_player_id_list: userid },
+  //         });
 
-          break;
-        }
-      }
-    }
-  });
+  //         break;
+  //       }
+  //     }
+  //   }
+  // });
   socket.on("manual_cashout_early", async (data) => {
     var userid = data.userid;
     if (!game_phase) {
@@ -156,13 +157,14 @@ io.on("connection", async (socket) => {
             bettorObject.bet_amount * current_multiplier -
             bettorObject.bet_amount;
           bettorObject.b_bet_live = false;
+          bettorObject.userdata.balance += bettorObject.userdata.bet_amount * current_multiplier
           io.emit("manual_cashout_early", bettorObject.userdata);
           io.emit(
             "receive_live_betting_table",
             JSON.stringify(live_bettors_table)
           );
           const currUser = await User.findById(userid);
-          currUser.balance += currUser.bet_amount * current_multiplier;
+          currUser.balance = bettorObject.userdata.balance;
           await currUser.save();
           // active_player_id_list.
           await theLoop.updateOne({
@@ -210,6 +212,7 @@ require("./passportConfig")(passport);
 
 //Passport.js login/register system
 app.post("/login", (req, res, next) => {
+  console.log(req.body);
   passport.authenticate("local", (err, user, info) => {
     if (err) throw err;
     if (!user) {
@@ -224,18 +227,23 @@ app.post("/login", (req, res, next) => {
 });
 
 app.post("/register", (req, res) => {
-  if (req.body.username.length < 3 || req.body.password < 3) {
+  console.log(req.body);
+  if (req.body.password < 3) {
+    res.send("Password must be more than 3 characters");
     return;
   }
-  console.log(req.body);
+  if (req.body.username.length < 3) {
+    res.send("Username must be more than 3 characters");
+    return;
+  }
   if (req.body.phonenumber == "") {
     res.send("Phone numner is required");
     return;
   }
 
-  User.findOne({ username: req.body.username, phonenumber: req.body.phonenumber }, async (err, doc) => {
+  User.findOne({ phonenumber: req.body.phonenumber }, async (err, doc) => {
     if (err) throw err;
-    if (doc) res.send("Username already exists");
+    if (doc) res.send("Phone number already exists");
     if (!doc) {
       const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
@@ -501,6 +509,7 @@ app.listen(5000, () => { });
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   playerIdList = theLoop.active_player_id_list;
+  console.log("cashout", playerIdList);
   crash_number = game_crash_value;
   for (const playerId of playerIdList) {
     const currUser = await User.findById(playerId);
