@@ -105,42 +105,42 @@ io.on("connection", async (socket) => {
     });
   });
 
-  // socket.on("auto_cashout_early", async (data) => {
-  //   console.log("auto_cashout_early", data);
-  //   var userid = data.userid;
-  //   var payout_multiplier = data.payout_multiplier;
-  //   if (!game_phase) {
-  //     return;
-  //   }
-  //   let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
-  //   current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
-  //   if (
-  //     payout_multiplier <= game_crash_value
-  //   ) {
-  //     for (const bettorObject of live_bettors_table) {
-  //       if (bettorObject.the_user_id === userid) {
-  //         bettorObject.cashout_multiplier = bettorObject.payout_multiplier;
-  //         bettorObject.profit =
-  //           bettorObject.bet_amount * current_multiplier - bettorObject.bet_amount;
-  //         bettorObject.b_bet_live = false;
-  //         io.emit(
-  //           "receive_live_betting_table",
-  //           JSON.stringify(live_bettors_table)
-  //         );
+  socket.on("auto_cashout_early", async (data) => {
+    console.log("auto_cashout_early", data);
+    var userid = data.userid;
+    var payout_multiplier = data.payout_multiplier;
+    if (!game_phase) {
+      return;
+    }
+    let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
+    current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
+    if (
+      payout_multiplier <= game_crash_value
+    ) {
+      for (const bettorObject of live_bettors_table) {
+        if (bettorObject.the_user_id === userid) {
+          bettorObject.cashout_multiplier = bettorObject.payout_multiplier;
+          bettorObject.profit =
+            bettorObject.bet_amount * current_multiplier - bettorObject.bet_amount;
+          bettorObject.b_bet_live = false;
+          io.emit(
+            "receive_live_betting_table",
+            JSON.stringify(live_bettors_table)
+          );
 
-  //         socket.emit("auto_cashout_early", bettorObject);
-  //         const currUser = await User.findById(userid);
-  //         currUser.balance += bettorObject.bet_amount * bettorObject.payout_multiplier;
-  //         await currUser.save();
-  //         await theLoop.updateOne({
-  //           $pull: { active_player_id_list: userid },
-  //         });
+          socket.emit("auto_cashout_early", bettorObject);
+          const currUser = await User.findById(userid);
+          currUser.balance += bettorObject.bet_amount * bettorObject.payout_multiplier;
+          await currUser.save();
+          await theLoop.updateOne({
+            $pull: { active_player_id_list: userid },
+          });
 
-  //         break;
-  //       }
-  //     }
-  //   }
-  // });
+          break;
+        }
+      }
+    }
+  });
   socket.on("manual_cashout_early", async (data) => {
     var userid = data.userid;
     if (!game_phase) {
