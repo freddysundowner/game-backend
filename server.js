@@ -77,7 +77,7 @@ io.on("connection", async (socket) => {
       console.log("NO ENOUGH MONEY IN THE WALLET");
       return;
     }
-
+    thisUser.balance = thisUser.balance - bet_amount
     info_json = {
       the_user_id: userid,
       the_username: thisUser.username,
@@ -87,7 +87,7 @@ io.on("connection", async (socket) => {
       profit: null,
       b_bet_live: true,
       payout_multiplier,
-      balance: thisUser.balance - bet_amount,
+      balance: thisUser.balance,
     };
     live_bettors_table.push(info_json);
     io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
@@ -98,7 +98,7 @@ io.on("connection", async (socket) => {
       payout_multiplier: payout_multiplier,
     });
     await User.findByIdAndUpdate(userid, {
-      balance: thisUser.balance - bet_amount,
+      balance: thisUser.balance,
     });
     await Game_loop.findByIdAndUpdate(GAME_LOOP_ID, {
       $push: { active_player_id_list: userid },
@@ -123,6 +123,7 @@ io.on("connection", async (socket) => {
           bettorObject.profit =
             bettorObject.bet_amount * current_multiplier - bettorObject.bet_amount;
           bettorObject.b_bet_live = false;
+          bettorObject.userdata.balance += bettorObject.bet_amount * current_multiplier
           io.emit(
             "receive_live_betting_table",
             JSON.stringify(live_bettors_table)
@@ -550,7 +551,7 @@ const loopUpdate = async () => {
     }
   } else if (cashout_phase) {
     if (!sent_cashout) {
-      cashout();
+      // cashout();
       sent_cashout = true;
       right_now = Date.now();
       const update_loop = await Game_loop.findById(GAME_LOOP_ID);
