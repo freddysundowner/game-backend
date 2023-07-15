@@ -40,7 +40,7 @@ let game_crash_value = -69;
 let sent_cashout = true;
 let active_player_id_list = [];
 io.on("connection", async (socket) => {
-  socket.on("clicked", (data) => { });
+  socket.on("clicked", (data) => {});
 
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // console.log(theLoop);
@@ -77,7 +77,7 @@ io.on("connection", async (socket) => {
       console.log("NO ENOUGH MONEY IN THE WALLET");
       return;
     }
-    thisUser.balance = thisUser.balance - bet_amount
+    thisUser.balance = thisUser.balance - bet_amount;
     info_json = {
       the_user_id: userid,
       the_username: thisUser.username,
@@ -114,16 +114,16 @@ io.on("connection", async (socket) => {
     }
     let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
-    if (
-      payout_multiplier <= game_crash_value
-    ) {
+    if (payout_multiplier <= game_crash_value) {
       for (const bettorObject of live_bettors_table) {
         if (bettorObject.the_user_id === userid) {
           bettorObject.cashout_multiplier = bettorObject.payout_multiplier;
           bettorObject.profit =
-            bettorObject.bet_amount * current_multiplier - bettorObject.bet_amount;
+            bettorObject.bet_amount * current_multiplier -
+            bettorObject.bet_amount;
           bettorObject.b_bet_live = false;
-          bettorObject.userdata.balance += bettorObject.bet_amount * current_multiplier
+          bettorObject.userdata.balance +=
+            bettorObject.bet_amount * current_multiplier;
           io.emit(
             "receive_live_betting_table",
             JSON.stringify(live_bettors_table)
@@ -131,7 +131,8 @@ io.on("connection", async (socket) => {
 
           socket.emit("auto_cashout_early", bettorObject);
           const currUser = await User.findById(userid);
-          currUser.balance += bettorObject.bet_amount * bettorObject.payout_multiplier;
+          currUser.balance +=
+            bettorObject.bet_amount * bettorObject.payout_multiplier;
           await currUser.save();
           await theLoop.updateOne({
             $pull: { active_player_id_list: userid },
@@ -158,7 +159,8 @@ io.on("connection", async (socket) => {
             bettorObject.bet_amount * current_multiplier -
             bettorObject.bet_amount;
           bettorObject.b_bet_live = false;
-          bettorObject.userdata.balance += bettorObject.userdata.bet_amount * current_multiplier
+          bettorObject.userdata.balance +=
+            bettorObject.userdata.bet_amount * current_multiplier;
           io.emit("manual_cashout_early", bettorObject.userdata);
           io.emit(
             "receive_live_betting_table",
@@ -182,7 +184,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(3000, () => { });
+server.listen(3000, "192.168.100.9", () => {});
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -191,7 +193,7 @@ mongoose.connect(process.env.MONGOOSE_DB_LINK, {
 });
 
 // Backend Setup
-app.use(bodyParser.json());
+app.use(bodyParser.json()); 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
   cors({
@@ -206,6 +208,7 @@ app.use(
     saveUninitialized: true,
   })
 );
+
 app.use(cookieParser(process.env.PASSPORT_SECRET));
 app.use(passport.initialize());
 app.use(passport.session());
@@ -260,8 +263,9 @@ app.post("/register", (req, res) => {
 });
 
 // Routes
-app.get("/user", checkAuthenticated, (req, res) => {
-  res.send(req.user);
+app.get("/user", async (req, res) => {
+  res.send(await User.findById("64b12da0780cc7162569b331"));
+  // res.send(req.user);
 });
 
 app.get("/logout", (req, res) => {
@@ -505,7 +509,7 @@ function checkNotAuthenticated(req, res, next) {
   next();
 }
 
-app.listen(5000, () => { });
+app.listen(5000, () => {});
 
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
@@ -528,7 +532,6 @@ let phase_start_time = Date.now();
 const pat = setInterval(async () => {
   await loopUpdate();
 }, 1000);
-
 
 // Game Loop
 const loopUpdate = async () => {
