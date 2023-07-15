@@ -184,7 +184,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(3000, () => { });
+server.listen(process.env.PORT || 3000, () => { });
 
 // Connect to MongoDB 
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -509,7 +509,7 @@ function checkNotAuthenticated(req, res, next) {
   next();
 }
 
-app.listen(5000, () => { });
+// app.listen(5000, () => { });
 
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
