@@ -11,7 +11,8 @@ const bodyParser = require("body-parser");
 const app = express();
 const User = require("./models/user");
 const Game_loop = require("./models/game_loop");
-require("dotenv").config();
+require("dotenv").config(); var ObjectId = require("mongodb").ObjectID;
+
 
 const GAME_LOOP_ID = "64a93f393638a7e25871f3dd";
 
@@ -19,6 +20,7 @@ const { Server } = require("socket.io");
 const http = require("http");
 const Stopwatch = require("statman-stopwatch");
 const { update } = require("./models/user");
+const Bet = require("./models/bet");
 const sw = new Stopwatch(true);
 
 // Start Socket.io Server
@@ -40,7 +42,8 @@ let game_crash_value = -69;
 let sent_cashout = true;
 let active_player_id_list = [];
 io.on("connection", async (socket) => {
-  socket.on("clicked", (data) => { });
+  console.log(socket.id);
+  io.emit("myconection");
 
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // console.log(theLoop);
@@ -78,6 +81,8 @@ io.on("connection", async (socket) => {
       return;
     }
     thisUser.balance = thisUser.balance - bet_amount;
+    const betId = new ObjectId()
+
     info_json = {
       the_user_id: userid,
       the_username: thisUser.username,
@@ -87,7 +92,7 @@ io.on("connection", async (socket) => {
       profit: null,
       b_bet_live: true,
       payout_multiplier,
-      balance: thisUser.balance,
+      balance: thisUser.balance, betId
     };
     live_bettors_table.push(info_json);
     io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
@@ -103,8 +108,36 @@ io.on("connection", async (socket) => {
     await Game_loop.findByIdAndUpdate(GAME_LOOP_ID, {
       $push: { active_player_id_list: userid },
     });
+
+    const bet = new Bet({
+      cashout_multiplier: payout_multiplier,
+      user: userid,
+      bet_amount: bet_amount,
+      _id: betId
+    });
+    await bet.save();
   });
 
+  socket.on("receive_my_bets_table", async (data) => {
+    console.log("receive_my_bets_table");
+    let bets = await Bet.find({ user: data.id }).sort({ createdAt: -1 });;
+    socket.emit("receive_my_bets_table", JSON.stringify(bets));
+  })
+  socket.on("get_game_status", async (data) => {
+    console.log("get game ststus");
+    let theLoop = await Game_loop.findById(GAME_LOOP_ID);
+    io.emit("crash_history", theLoop.previous_crashes);
+    io.emit("get_round_id_list", theLoop.round_id_list);
+    var status;
+    if (betting_phase == true) {
+      status = { phase: "betting_phase", info: phase_start_time };
+      return;
+    } else if (game_phase == true) {
+      status = { phase: "game_phase", info: phase_start_time };
+      return;
+    }
+    socket.emit("get_game_status", status);
+  })
   socket.on("auto_cashout_early", async (data) => {
     console.log("auto_cashout_early", data);
     var userid = data.userid;
@@ -134,9 +167,14 @@ io.on("connection", async (socket) => {
           currUser.balance +=
             bettorObject.bet_amount * bettorObject.payout_multiplier;
           await currUser.save();
-          await theLoop.updateOne({
-            $pull: { active_player_id_list: userid },
-          });
+
+          await Bet.findByIdAndUpdate(
+            bettorObject.betId,
+            {
+              cashout_multiplier: bettorObject.cashout_multiplier,
+              profit: bettorObject.profit,
+            }
+          );
 
           break;
         }
@@ -173,6 +211,15 @@ io.on("connection", async (socket) => {
           await theLoop.updateOne({
             $pull: { active_player_id_list: userid },
           });
+
+          console.log(bettorObject);
+          await Bet.findByIdAndUpdate(
+            bettorObject.betId,
+            {
+              cashout_multiplier: bettorObject.cashout_multiplier,
+              profit: bettorObject.profit,
+            }
+          );
 
           break;
         }
