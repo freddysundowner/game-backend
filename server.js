@@ -40,7 +40,7 @@ let game_crash_value = -69;
 let sent_cashout = true;
 let active_player_id_list = [];
 io.on("connection", async (socket) => {
-  socket.on("clicked", (data) => {});
+  socket.on("clicked", (data) => { });
 
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // console.log(theLoop);
@@ -184,16 +184,16 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(3000, "192.168.100.9", () => {});
+server.listen(3000, () => { });
 
-// Connect to MongoDB
+// Connect to MongoDB 
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
 
 // Backend Setup
-app.use(bodyParser.json()); 
+app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
   cors({
@@ -263,9 +263,9 @@ app.post("/register", (req, res) => {
 });
 
 // Routes
-app.get("/user", async (req, res) => {
-  res.send(await User.findById("64b12da0780cc7162569b331"));
-  // res.send(req.user);
+app.get("/user", checkAuthenticated, async (req, res) => {
+  // res.send(await User.findById("64b12da0780cc7162569b331"));
+  res.send(req.user);
 });
 
 app.get("/logout", (req, res) => {
@@ -509,7 +509,7 @@ function checkNotAuthenticated(req, res, next) {
   next();
 }
 
-app.listen(5000, () => {});
+app.listen(5000, () => { });
 
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
@@ -524,6 +524,7 @@ const cashout = async () => {
     }
   }
   theLoop.active_player_id_list = [];
+  live_bettors_table = [];
   await theLoop.save();
 };
 
@@ -554,7 +555,7 @@ const loopUpdate = async () => {
     }
   } else if (cashout_phase) {
     if (!sent_cashout) {
-      // cashout();
+      cashout();
       sent_cashout = true;
       right_now = Date.now();
       const update_loop = await Game_loop.findById(GAME_LOOP_ID);
