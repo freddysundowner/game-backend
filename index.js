@@ -11,8 +11,8 @@ const bodyParser = require("body-parser");
 const app = express();
 const User = require("./models/user");
 const Game_loop = require("./models/game_loop");
-require("dotenv").config(); var ObjectId = require("mongodb").ObjectID;
-
+require("dotenv").config();
+var ObjectId = require("mongodb").ObjectID;
 
 const GAME_LOOP_ID = "64a93f393638a7e25871f3dd";
 
@@ -81,7 +81,7 @@ io.on("connection", async (socket) => {
       return;
     }
     thisUser.balance = thisUser.balance - bet_amount;
-    const betId = new ObjectId()
+    const betId = new ObjectId();
 
     info_json = {
       the_user_id: userid,
@@ -92,11 +92,12 @@ io.on("connection", async (socket) => {
       profit: null,
       b_bet_live: true,
       payout_multiplier,
-      balance: thisUser.balance, betId
+      balance: thisUser.balance,
+      betId,
     };
     live_bettors_table.push(info_json);
     io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
-    io.emit("success_betting", info_json);
+    socket.emit("success_betting", info_json);
 
     await User.findByIdAndUpdate(userid, {
       bet_amount: bet_amount,
@@ -113,16 +114,16 @@ io.on("connection", async (socket) => {
       cashout_multiplier: payout_multiplier,
       user: userid,
       bet_amount: bet_amount,
-      _id: betId
+      _id: betId,
     });
     await bet.save();
   });
 
   socket.on("receive_my_bets_table", async (data) => {
     console.log("receive_my_bets_table");
-    let bets = await Bet.find({ user: data.id }).sort({ createdAt: -1 });;
+    let bets = await Bet.find({ user: data.id }).sort({ createdAt: -1 });
     socket.emit("receive_my_bets_table", JSON.stringify(bets));
-  })
+  });
   socket.on("get_game_status", async (data) => {
     console.log("get game ststus");
     let theLoop = await Game_loop.findById(GAME_LOOP_ID);
@@ -137,7 +138,7 @@ io.on("connection", async (socket) => {
       return;
     }
     socket.emit("get_game_status", status);
-  })
+  });
   socket.on("auto_cashout_early", async (data) => {
     console.log("auto_cashout_early", data);
     var userid = data.userid;
@@ -168,13 +169,10 @@ io.on("connection", async (socket) => {
             bettorObject.bet_amount * bettorObject.payout_multiplier;
           await currUser.save();
 
-          await Bet.findByIdAndUpdate(
-            bettorObject.betId,
-            {
-              cashout_multiplier: bettorObject.cashout_multiplier,
-              profit: bettorObject.profit,
-            }
-          );
+          await Bet.findByIdAndUpdate(bettorObject.betId, {
+            cashout_multiplier: bettorObject.cashout_multiplier,
+            profit: bettorObject.profit,
+          });
 
           break;
         }
@@ -199,7 +197,7 @@ io.on("connection", async (socket) => {
           bettorObject.b_bet_live = false;
           bettorObject.userdata.balance +=
             bettorObject.userdata.bet_amount * current_multiplier;
-          io.emit("manual_cashout_early", bettorObject.userdata);
+          socket.emit("manual_cashout_early", bettorObject.userdata);
           io.emit(
             "receive_live_betting_table",
             JSON.stringify(live_bettors_table)
@@ -213,13 +211,10 @@ io.on("connection", async (socket) => {
           });
 
           console.log(bettorObject);
-          await Bet.findByIdAndUpdate(
-            bettorObject.betId,
-            {
-              cashout_multiplier: bettorObject.cashout_multiplier,
-              profit: bettorObject.profit,
-            }
-          );
+          await Bet.findByIdAndUpdate(bettorObject.betId, {
+            cashout_multiplier: bettorObject.cashout_multiplier,
+            profit: bettorObject.profit,
+          });
 
           break;
         }
@@ -231,9 +226,9 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3000, () => { });
+server.listen(process.env.PORT || 3000, "192.168.100.9", () => {});
 
-// Connect to MongoDB 
+// Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -310,7 +305,9 @@ app.post("/register", (req, res) => {
 });
 
 // Routes
+// app.get("/user", async (req, res) => {
 app.get("/user", checkAuthenticated, async (req, res) => {
+  console.log("bb");
   // res.send(await User.findById("64b12da0780cc7162569b331"));
   res.send(req.user);
 });
@@ -542,6 +539,7 @@ app.get("/retrieve_bet_history", async (req, res) => {
 });
 
 function checkAuthenticated(req, res, next) {
+  console.log("auth");
   if (req.isAuthenticated()) {
     return next();
   }
