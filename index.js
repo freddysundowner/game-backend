@@ -534,8 +534,8 @@ app.get("/retrieve_active_bettors_list", async (req, res) => {
 
 app.get("/retrieve_bet_history", async (req, res) => {
   let theLoop = await Game_loop.findById(GAME_LOOP_ID);
-  io.emit("crash_history", theLoop.previous_crashes);
-  return;
+  // io.emit("crash_history", theLoop.previous_crashes);
+  return res.send(theLoop.previous_crashes);
 });
 
 function checkAuthenticated(req, res, next) {
