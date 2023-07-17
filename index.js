@@ -226,7 +226,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3000, "192.168.100.9", () => {});
+server.listen(process.env.PORT || 3000, () => { });
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -283,20 +283,23 @@ app.post("/register", (req, res) => {
     return;
   }
   if (req.body.phonenumber == "") {
-    res.send("Phone numner is required");
+    res.send("Phone number is required");
     return;
   }
 
-  User.findOne({ phonenumber: req.body.phonenumber }, async (err, doc) => {
+  var phone = req.body.username;
+  var username = req.body.phonenumber;
+
+  User.findOne({ phonenumber: phone }, async (err, doc) => {
     if (err) throw err;
     if (doc) res.send("Phone number already exists");
     if (!doc) {
       const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
       const newUser = new User({
-        username: req.body.username,
+        username: username,
         password: hashedPassword,
-        phonenumber: req.body.phonenumber,
+        phonenumber: phone,
       });
       await newUser.save();
       res.send("Loading...");
