@@ -543,7 +543,7 @@ app.post("/deposit", async (req, res) => {
   if (transactions.length > 0) {
     res.json({ status: 500, message: "dublicate" })
   } else {
-    var amount = req.body.amount;
+    var amount = parseInt(req.body.amount);
     var socketid = req.body.socketid;
     io.to(socketid).emit("deposit_success", amount);
     var bf = req.body.phone.slice(3);
