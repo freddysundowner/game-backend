@@ -121,7 +121,6 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("receive_my_bets_table", async (data) => {
-    console.log("receive_my_bets_table");
     let bets = await Bet.find({ user: data.id }).sort({ createdAt: -1 });
     socket.emit("receive_my_bets_table", JSON.stringify(bets));
   });
@@ -311,8 +310,6 @@ app.post("/register", (req, res) => {
 // Routes
 // app.get("/user", async (req, res) => {
 app.get("/user", checkAuthenticated, async (req, res) => {
-  console.log("bb");
-  // res.send(await User.findById("64b12da0780cc7162569b331"));
   res.send(req.user);
 });
 
@@ -569,7 +566,6 @@ app.get("/retrieve_bet_history", async (req, res) => {
 });
 
 function checkAuthenticated(req, res, next) {
-  console.log("auth");
   if (req.isAuthenticated()) {
     return next();
   }
