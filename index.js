@@ -536,7 +536,7 @@ app.get("/retrieve_active_bettors_list", async (req, res) => {
 });
 
 app.post("/deposit", async (req, res) => {
-  console.log(req.body);
+  console.log(req);
   res.json("success")
 });
 
