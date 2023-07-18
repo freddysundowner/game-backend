@@ -535,6 +535,11 @@ app.get("/retrieve_active_bettors_list", async (req, res) => {
   return;
 });
 
+app.post("/deposit", async (req, res) => {
+  console.log(req.body);
+  res.json("success")
+});
+
 app.get("/retrieve_bet_history", async (req, res) => {
   let theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // io.emit("crash_history", theLoop.previous_crashes);
