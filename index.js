@@ -537,7 +537,7 @@ app.get("/retrieve_active_bettors_list", async (req, res) => {
 });
 
 app.post("/deposit", async (req, res) => {
-  var transaction_code = "tt";
+  var transaction_code = req.body.transactionid;
   const transactions = await Transaction.find({ "transaction_code": transaction_code });
   if (transactions.length > 0) {
     res.json({ status: 500, message: "dublicate" })
