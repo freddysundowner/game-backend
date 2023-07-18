@@ -21,6 +21,7 @@ const http = require("http");
 const Stopwatch = require("statman-stopwatch");
 const { update } = require("./models/user");
 const Bet = require("./models/bet");
+const Transaction = require("./models/Transaction");
 const sw = new Stopwatch(true);
 
 // Start Socket.io Server
@@ -536,8 +537,28 @@ app.get("/retrieve_active_bettors_list", async (req, res) => {
 });
 
 app.post("/deposit", async (req, res) => {
-  console.log(req.body);
-  res.json("success")
+  var transaction_code = "tt";
+  const transactions = await Transaction.find({ "transaction_code": transaction_code });
+  if (transactions.length > 0) {
+    res.json({ status: 500, message: "dublicate" })
+  } else {
+    var amount = req.body.amount;
+    var socketid = req.body.socketid;
+    io.to(socketid).emit("deposit_success", amount);
+    var bf = req.body.phone.slice(3);
+    var phone = "0" + bf;
+    const currUser = await User.findOne({ "username": phone });
+    currUser.balance += amount;
+    currUser.save()
+
+    const transaction = new Transaction({
+      amount: amount,
+      user: currUser._id,
+      transaction_code: transaction_code,
+    });
+    await transaction.save();
+    res.json(currUser)
+  }
 });
 
 app.get("/retrieve_bet_history", async (req, res) => {
