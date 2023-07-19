@@ -11,6 +11,7 @@ const bodyParser = require("body-parser");
 const app = express();
 const User = require("./models/user");
 const Game_loop = require("./models/game_loop");
+const Axios = require("axios");
 require("dotenv").config();
 var ObjectId = require("mongodb").ObjectID;
 
@@ -226,7 +227,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3000, () => { });
+server.listen(process.env.PORT || 3000, "192.168.2.103", () => {});
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -532,22 +533,40 @@ app.get("/retrieve_active_bettors_list", async (req, res) => {
   io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
   return;
 });
-
+app.post("/depositaccount", async (req, res) => {
+  var data = {
+    amount: req.body.amount,
+    total_amount: req.body.amount,
+    phone: "254" + req.body.phone.slice(1),
+    socketid: req.body.socketid,
+  };
+  console.log("data", data);
+  Axios({
+    method: "POST",
+    data: data,
+    withCredentials: true,
+    url: "https://sunpay.co.ke/api/mpesac2b",
+  }).then(async (res) => {
+    console.log(res.data);
+  });
+});
 app.post("/deposit", async (req, res) => {
   console.log(req.body);
   var transaction_code = req.body.transactionid;
-  const transactions = await Transaction.find({ "transaction_code": transaction_code });
+  const transactions = await Transaction.find({
+    transaction_code: transaction_code,
+  });
   if (transactions.length > 0) {
-    res.json({ status: 500, message: "dublicate" })
+    res.json({ status: 500, message: "dublicate" });
   } else {
     var amount = parseInt(req.body.amount);
     var socketid = req.body.socketid;
     io.to(socketid).emit("deposit_success", amount);
     var bf = req.body.phone.slice(3);
     var phone = "0" + bf;
-    const currUser = await User.findOne({ "username": phone });
+    const currUser = await User.findOne({ username: phone });
     currUser.balance += amount;
-    currUser.save()
+    currUser.save();
 
     const transaction = new Transaction({
       amount: amount,
@@ -555,7 +574,7 @@ app.post("/deposit", async (req, res) => {
       transaction_code: transaction_code,
     });
     await transaction.save();
-    res.json(currUser)
+    res.json(currUser);
   }
 });
 
