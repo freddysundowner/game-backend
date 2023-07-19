@@ -227,7 +227,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3000, "192.168.2.103", () => {});
+server.listen(process.env.PORT || 3000,  () => {});
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
