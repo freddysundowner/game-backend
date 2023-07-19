@@ -33,16 +33,16 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
-app.use(function (req, res, next) {
-  // update to match the domain you will make the request from
-  res.header("Access-Control-Allow-Origin", "https://wiggolive.com");
-  res.header("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept"
-  );
-  next();
-});
+var allowlist = ["https://wiggolive.com"];
+var corsOptionsDelegate = function (req, callback) {
+  var corsOptions;
+  if (allowlist.indexOf(req.header("Origin")) !== -1) {
+    corsOptions = { origin: true }; // reflect (enable) the requested origin in the CORS response
+  } else {
+    corsOptions = { origin: false }; // disable CORS for this request
+  }
+  callback(null, corsOptions); // callback expects two parameters: error and options
+};
 
 const messages_list = [];
 let live_bettors_table = [];
@@ -247,12 +247,7 @@ mongoose.connect(process.env.MONGOOSE_DB_LINK, {
 // Backend Setup
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(
-  cors({
-    origin: true,
-    credentials: true,
-  })
-);
+app.use(corsOptionsDelegate);
 app.use(
   session({
     secret: process.env.PASSPORT_SECRET,
