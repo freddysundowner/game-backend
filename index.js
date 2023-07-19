@@ -33,7 +33,16 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
-// var currentConnections = {};
+app.use(function (req, res, next) {
+  // update to match the domain you will make the request from
+  res.header("Access-Control-Allow-Origin", "https://wiggolive.com");
+  res.header("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept"
+  );
+  next();
+});
 
 const messages_list = [];
 let live_bettors_table = [];
@@ -227,7 +236,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3000,  () => {});
+server.listen(process.env.PORT || 3000, () => {});
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
