@@ -60,6 +60,12 @@ app.use(cookieParser(process.env.PASSPORT_SECRET));
 app.use(passport.initialize());
 app.use(passport.session());
 require("./passportConfig")(passport);
+const io = require("socket.io")(server, {
+  cors: {
+    origin: "http://localhost:3002",
+    credentials: true,
+  },
+});
 // tell the application to listen on the port specified
 server.listen(process.env.PORT, function (err) {
   if (err) {
@@ -67,12 +73,7 @@ server.listen(process.env.PORT, function (err) {
   }
   console.log("server listening on: ", ":", process.env.PORT);
 });
-const io = require("socket.io")(server, {
-  cors: {
-    origin: "http://localhost:3002",
-    credentials: true,
-  },
-});
+
 app.get("/", async (req, res) => {
   res.send({ default: "none" });
 });
