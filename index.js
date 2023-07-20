@@ -37,7 +37,7 @@ app.use(
 // setup socket.io and register it with the server
 const io = require("socket.io")(server, {
   cors: {
-    origin: "*",
+    origin: "http://localhost:3002",
     methods: ["GET", "POST"],
   },
 });
