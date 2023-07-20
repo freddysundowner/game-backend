@@ -21,7 +21,11 @@ const Game_loop = require("./models/game_loop");
 const Axios = require("axios");
 require("dotenv").config();
 var ObjectId = require("mongodb").ObjectID;
-
+// Connect to MongoDB
+mongoose.connect(process.env.MONGOOSE_DB_LINK, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -35,7 +39,6 @@ app.use(
 );
 
 // setup socket.io and register it with the server
-const io = require("socket.io")(server);
 // io.set("origins", "*:*");
 app.use(
   session({
@@ -64,15 +67,12 @@ server.listen(process.env.PORT, function (err) {
   }
   console.log("server listening on: ", ":", process.env.PORT);
 });
+const io = require("socket.io")(server);
 app.get("/", async (req, res) => {
   res.send({ default: "none" });
 });
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGOOSE_DB_LINK, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+
 
 // app.set("trust proxy", 1);
 
