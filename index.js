@@ -251,11 +251,11 @@ app.use(
     resave: true,
     saveUninitialized: false,
     store: MongoStore.create({ mongoUrl: process.env.MONGOOSE_DB_LINK }),
-    // cookie: {
-    //   maxAge: 24 * 60 * 60 * 1000, //please change it based on your needs
-    //   secure: true,
-    //   sameSite: 'none'
-    // }
+    cookie: {
+      maxAge: 24 * 60 * 60 * 1000, //please change it based on your needs
+      secure: true,
+      sameSite: 'none'
+    }
   })
 );
 
