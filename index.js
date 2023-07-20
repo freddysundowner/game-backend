@@ -73,9 +73,9 @@ app.get("/", async (req, res) => {
   res.send({ default: "none" });
 });
 // app.get("/user", async (req, res) => {
-app.get("/user", async (req, res) => {
-  res.send({ status: 200 });
-});
+// app.get("/user", async (req, res) => {
+//   res.send({ status: 200 });
+// });
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
