@@ -7,7 +7,6 @@ const passportLocal = require("passport-local").Strategy;
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
-const MongoStore = require('connect-mongo');
 const bodyParser = require("body-parser");
 const app = express();
 const User = require("./models/user");
@@ -18,39 +17,21 @@ var ObjectId = require("mongodb").ObjectID;
 
 const GAME_LOOP_ID = "64a93f393638a7e25871f3dd";
 
-// const { Server } = require("socket.io");
+const { Server } = require("socket.io");
 const http = require("http");
 const Stopwatch = require("statman-stopwatch");
 const { update } = require("./models/user");
 const Bet = require("./models/bet");
 const Transaction = require("./models/Transaction");
-const sw = new Stopwatch(true);// the express app is registered with the server
-const server = http.createServer(app);
-
-// setup socket.io and register it with the server
-const io = require('socket.io')(server, {
-  cors: {
-    origin: "https://wiggolive.com",
-    methods: ["GET", "POST"]
-  }
-});
-
-// tell the application to listen on the port specified
-server.listen(process.env.PORT, function (err) {
-  if (err) {
-    throw err;
-  }
-  console.log('server listening on: ', ':', process.env.PORT);
-});
+const sw = new Stopwatch(true);
 // Start Socket.io Server
-// const server = app.listen(3000);
-// var io = require('socket.io')(server);
-// const io = new Server(server, {
-//   cors: {
-//     origin: "*",
-//     methods: ["GET", "POST"],
-//   },
-// });
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
 // var currentConnections = {};
 
 const messages_list = [];
@@ -61,8 +42,6 @@ let cashout_phase = true;
 let game_crash_value = -69;
 let sent_cashout = true;
 let active_player_id_list = [];
-
-
 io.on("connection", async (socket) => {
   console.log(socket.id);
   io.emit("myconection");
@@ -181,7 +160,7 @@ io.on("connection", async (socket) => {
             bettorObject.bet_amount * current_multiplier;
           io.emit(
             "receive_live_betting_table",
-            JSON.stringify(live_bettors_table)
+            JSON.stringify(live_bettors_table) 
           );
 
           socket.emit("auto_cashout_early", bettorObject);
@@ -247,7 +226,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-// server.listen(process.env.PORT || 3000, () => { });
+server.listen(process.env.PORT || 3000, "192.168.135.47", () => {});
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -264,18 +243,11 @@ app.use(
     credentials: true,
   })
 );
-app.set("trust proxy", 1);
 app.use(
   session({
     secret: process.env.PASSPORT_SECRET,
     resave: true,
-    saveUninitialized: false,
-    store: MongoStore.create({ mongoUrl: process.env.MONGOOSE_DB_LINK }),
-    cookie: {
-      maxAge: 24 * 60 * 60 * 1000, //please change it based on your needs
-      secure: true,
-      sameSite: 'none'
-    }
+    saveUninitialized: true,
   })
 );
 
@@ -290,11 +262,11 @@ app.post("/login", (req, res, next) => {
   passport.authenticate("local", (err, user, info) => {
     if (err) throw err;
     if (!user) {
-      res.json({ status: 400, message: "Username or Password is Wrong" });
+      res.send("Username or Password is Wrong");
     } else {
       req.logIn(user, (err) => {
         if (err) throw err;
-        res.json({ status: 200, message: "Logged in successfully" });
+        res.send("Login Successful");
       });
     }
   })(req, res, next);
@@ -303,15 +275,15 @@ app.post("/login", (req, res, next) => {
 app.post("/register", (req, res) => {
   console.log(req.body);
   if (req.body.password < 3) {
-    res.json({ status: 400, message: "Password must be more than 3 characters" });
+    res.send("Password must be more than 3 characters");
     return;
   }
   if (req.body.username.length < 3) {
-    res.json({ status: 400, message: "Username must be more than 3 characters" });
+    res.send("Username must be more than 3 characters");
     return;
   }
   if (req.body.phonenumber == "") {
-    res.json({ status: 400, message: "Phone number is required" });
+    res.send("Phone number is required");
     return;
   }
 
@@ -320,7 +292,7 @@ app.post("/register", (req, res) => {
 
   User.findOne({ phonenumber: phone }, async (err, doc) => {
     if (err) throw err;
-    if (doc) res.json({ status: 400, message: "Phone number already exists" });
+    if (doc) res.send("Phone number already exists");
     if (!doc) {
       const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
@@ -330,7 +302,7 @@ app.post("/register", (req, res) => {
         phonenumber: phone,
       });
       await newUser.save();
-      res.json({ status: 200, message: "Registered in successfully" });
+      res.send("Loading...");
     }
   });
 });
@@ -338,7 +310,6 @@ app.post("/register", (req, res) => {
 // Routes
 // app.get("/user", async (req, res) => {
 app.get("/user", checkAuthenticated, async (req, res) => {
-  console.log("res", req.session);
   res.send(req.user);
 });
 
@@ -598,7 +569,6 @@ app.get("/retrieve_bet_history", async (req, res) => {
 });
 
 function checkAuthenticated(req, res, next) {
-  console.log(req.session.user);
   if (req.isAuthenticated()) {
     return next();
   }
@@ -612,6 +582,8 @@ function checkNotAuthenticated(req, res, next) {
   }
   next();
 }
+
+// app.listen(5000, () => { });
 
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
