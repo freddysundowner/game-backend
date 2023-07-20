@@ -37,7 +37,7 @@ app.use(
 // setup socket.io and register it with the server
 const io = require("socket.io")(server, {
   cors: {
-    origin: "https://wiggolive.com",
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });
