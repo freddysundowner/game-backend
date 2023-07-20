@@ -239,10 +239,7 @@ mongoose.connect(process.env.MONGOOSE_DB_LINK, {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
-  cors({
-    // origin: ['http://192.168.135.154:3001', 'https://wiggolive.com'],
-    credentials: true,
-  })
+  cors()
 );
 app.set("trust proxy", 1);
 app.use(
