@@ -18,21 +18,34 @@ var ObjectId = require("mongodb").ObjectID;
 
 const GAME_LOOP_ID = "64a93f393638a7e25871f3dd";
 
-const { Server } = require("socket.io");
+// const { Server } = require("socket.io");
 const http = require("http");
 const Stopwatch = require("statman-stopwatch");
 const { update } = require("./models/user");
 const Bet = require("./models/bet");
 const Transaction = require("./models/Transaction");
-const sw = new Stopwatch(true);
-// Start Socket.io Server
+const sw = new Stopwatch(true);// the express app is registered with the server
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-  },
+
+// setup socket.io and register it with the server
+const io = require('socket.io')(server);
+
+// tell the application to listen on the port specified
+server.listen(process.env.PORT, function (err) {
+  if (err) {
+    throw err;
+  }
+  console.log('server listening on: ', ':', process.env.PORT);
 });
+// Start Socket.io Server
+// const server = app.listen(3000);
+// var io = require('socket.io')(server);
+// const io = new Server(server, {
+//   cors: {
+//     origin: "*",
+//     methods: ["GET", "POST"],
+//   },
+// });
 // var currentConnections = {};
 
 const messages_list = [];
@@ -43,6 +56,8 @@ let cashout_phase = true;
 let game_crash_value = -69;
 let sent_cashout = true;
 let active_player_id_list = [];
+
+
 io.on("connection", async (socket) => {
   console.log(socket.id);
   io.emit("myconection");
@@ -227,7 +242,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3000, () => { });
+// server.listen(process.env.PORT || 3000, () => { });
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -592,8 +607,6 @@ function checkNotAuthenticated(req, res, next) {
   }
   next();
 }
-
-app.listen(5000, () => { });
 
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
