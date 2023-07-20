@@ -9,7 +9,6 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const GAME_LOOP_ID = "64a93f393638a7e25871f3dd";
 
-const http = require("http");
 const Bet = require("./models/bet");
 const Transaction = require("./models/Transaction");
 
