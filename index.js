@@ -60,8 +60,17 @@ app.use(cookieParser(process.env.PASSPORT_SECRET));
 app.use(passport.initialize());
 app.use(passport.session());
 require("./passportConfig")(passport);
-io.origins("*:*");
-const io = require("socket.io")(server);
+const io = require("socket.io")(server, {
+  handlePreflightRequest: (req, res) => {
+    const headers = {
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Origin": "http://localhost:3002", //or the specific origin you want to give access to,
+      "Access-Control-Allow-Credentials": true,
+    };
+    res.writeHead(200, headers);
+    res.end();
+  },
+});
 // tell the application to listen on the port specified
 server.listen(process.env.PORT, function (err) {
   if (err) {
