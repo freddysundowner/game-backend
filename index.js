@@ -65,7 +65,7 @@ const io = require("socket.io")(server, {
     origin: url,
     methods: ["GET", "POST"],
     credentials: true,
-  },
+  }, //
 });
 // tell the application to listen on the port specified
 server.listen(process.env.PORT, function (err) {
