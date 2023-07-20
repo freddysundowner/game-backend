@@ -3,6 +3,7 @@ const passport = require("passport");
 const http = require("http");
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
+const cors = require("cors");
 require("dotenv").config();
 const app = express();
 const server = http.createServer(app);
