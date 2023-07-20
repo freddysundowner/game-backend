@@ -239,7 +239,10 @@ mongoose.connect(process.env.MONGOOSE_DB_LINK, {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
-  cors()
+  cors({
+    origin: true,
+    credentials: true,
+  })
 );
 app.set("trust proxy", 1);
 app.use(
