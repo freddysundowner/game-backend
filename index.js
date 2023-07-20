@@ -35,13 +35,8 @@ app.use(
 );
 
 // setup socket.io and register it with the server
-const io = require("socket.io")(server, {
-  cors: {
-    origin: "http://localhost:3002",
-    methods: ["GET", "POST"],
-  },
-});
-
+const io = require("socket.io")(server);
+// io.set("origins", "*:*");
 app.use(
   session({
     secret: process.env.PASSPORT_SECRET,
@@ -72,10 +67,7 @@ server.listen(process.env.PORT, function (err) {
 app.get("/", async (req, res) => {
   res.send({ default: "none" });
 });
-// app.get("/user", async (req, res) => {
-// app.get("/user", async (req, res) => {
-//   res.send({ status: 200 });
-// });
+
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -85,9 +77,6 @@ mongoose.connect(process.env.MONGOOSE_DB_LINK, {
 
 // app.set("trust proxy", 1);
 
-// // app.use(logger("dev"));
-// app.use(express.json({ limit: "50mb" }));
-// app.use(express.urlencoded({ extended: true }));
 
 // setup socket.io and register it with the server
 // const io = require("socket.io")(server, {
@@ -97,14 +86,6 @@ mongoose.connect(process.env.MONGOOSE_DB_LINK, {
 //   },
 // });
 
-// tell the application to listen on the port specified
-// server.listen(process.env.PORT, function (err) {
-//   if (err) {
-//     throw err;
-//   }
-//   console.log("server listening on: ", ":", process.env.PORT);
-// });
-// var currentConnections = {};
 
 const messages_list = [];
 let live_bettors_table = [];
