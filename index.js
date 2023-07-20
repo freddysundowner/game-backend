@@ -7,6 +7,7 @@ const passportLocal = require("passport-local").Strategy;
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
+const MongoStore = require('connect-mongo');
 const bodyParser = require("body-parser");
 const app = express();
 const User = require("./models/user");
@@ -239,7 +240,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
   cors({
-    origin: ['https://wiggolive.com', 'http://localhost:3001'],
+    origin: 'https://wiggolive.com',  //Your Client, do not write '*'
     credentials: true,
   })
 );
@@ -247,8 +248,8 @@ app.use(
   session({
     secret: process.env.PASSPORT_SECRET,
     resave: true,
-    saveUninitialized: true,
-    cookie: { secure: true }
+    saveUninitialized: false,
+    store: MongoStore.create({ mongoUrl: process.env.MONGOOSE_DB_LINK })
   })
 );
 
@@ -265,6 +266,7 @@ app.post("/login", (req, res, next) => {
     if (!user) {
       res.json({ status: 400, message: "Username or Password is Wrong" });
     } else {
+      req.session.user = user._id;
       req.logIn(user, (err) => {
         if (err) throw err;
         res.json({ status: 200, message: "Logged in successfully" });
@@ -311,6 +313,7 @@ app.post("/register", (req, res) => {
 // Routes
 // app.get("/user", async (req, res) => {
 app.get("/user", checkAuthenticated, async (req, res) => {
+  console.log("res", req.session);
   res.send(req.user);
 });
 
@@ -584,7 +587,7 @@ function checkNotAuthenticated(req, res, next) {
   next();
 }
 
-// app.listen(5000, () => { });
+app.listen(5000, () => { });
 
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
