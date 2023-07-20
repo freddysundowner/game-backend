@@ -249,7 +249,7 @@ app.use(
     secret: process.env.PASSPORT_SECRET,
     resave: true,
     saveUninitialized: false,
-    store: MongoStore.create({ mongoUrl: process.env.MONGOOSE_DB_LINK }),
+    // store: MongoStore.create({ mongoUrl: process.env.MONGOOSE_DB_LINK }),
     cookie: {
       maxAge: 24 * 60 * 60 * 1000, //please change it based on your needs
       secure: true,
