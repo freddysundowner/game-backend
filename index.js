@@ -243,11 +243,13 @@ app.use(
     credentials: true,
   })
 );
+app.set('trust proxy', 1) // trust first proxy
 app.use(
   session({
     secret: process.env.PASSPORT_SECRET,
     resave: true,
     saveUninitialized: true,
+    cookie: { secure: true }
   })
 );
 
