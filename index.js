@@ -28,10 +28,10 @@ mongoose.connect(process.env.MONGOOSE_DB_LINK, {
 });
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
-
+var url = "http://localhost:3002";
 app.use(
   cors({
-    origin: "http://localhost:3002",
+    origin: url,
     credentials: true,
     methods: "GET,POST,PUT,DELETE, PATCH",
     maxAge: 3600,
@@ -60,7 +60,13 @@ app.use(cookieParser(process.env.PASSPORT_SECRET));
 app.use(passport.initialize());
 app.use(passport.session());
 require("./passportConfig")(passport);
-const io = require("socket.io")(server);
+const io = require("socket.io")(server, {
+  cors: {
+    origin: url,
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
 // tell the application to listen on the port specified
 server.listen(process.env.PORT, function (err) {
   if (err) {
