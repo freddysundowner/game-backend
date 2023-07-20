@@ -226,7 +226,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3000, "192.168.135.47", () => {});
+server.listen(process.env.PORT || 3000, () => { });
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -262,11 +262,11 @@ app.post("/login", (req, res, next) => {
   passport.authenticate("local", (err, user, info) => {
     if (err) throw err;
     if (!user) {
-      res.send("Username or Password is Wrong");
+      res.json({ status: 400, message: "Username or Password is Wrong" });
     } else {
       req.logIn(user, (err) => {
         if (err) throw err;
-        res.send("Login Successful");
+        res.json({ status: 200, message: "Logged in successfully" });
       });
     }
   })(req, res, next);
@@ -275,15 +275,15 @@ app.post("/login", (req, res, next) => {
 app.post("/register", (req, res) => {
   console.log(req.body);
   if (req.body.password < 3) {
-    res.send("Password must be more than 3 characters");
+    res.json({ status: 400, message: "Password must be more than 3 characters" });
     return;
   }
   if (req.body.username.length < 3) {
-    res.send("Username must be more than 3 characters");
+    res.json({ status: 400, message: "Username must be more than 3 characters" });
     return;
   }
   if (req.body.phonenumber == "") {
-    res.send("Phone number is required");
+    res.json({ status: 400, message: "Phone number is required" });
     return;
   }
 
@@ -292,7 +292,7 @@ app.post("/register", (req, res) => {
 
   User.findOne({ phonenumber: phone }, async (err, doc) => {
     if (err) throw err;
-    if (doc) res.send("Phone number already exists");
+    if (doc) res.json({ status: 400, message: "Phone number already exists" });
     if (!doc) {
       const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
@@ -302,7 +302,7 @@ app.post("/register", (req, res) => {
         phonenumber: phone,
       });
       await newUser.save();
-      res.send("Loading...");
+      res.json({ status: 200, message: "Registered in successfully" });
     }
   });
 });
