@@ -1,98 +1,54 @@
-const mongoose = require("mongoose");
 const express = require("express");
-const cors = require("cors");
-const passport = require("passport");
-const passportLocal = require("passport-local").Strategy;
-const MongoStore = require("connect-mongo");
-const cookieParser = require("cookie-parser");
-const bcrypt = require("bcryptjs");
-const session = require("express-session");
-const bodyParser = require("body-parser");
+const path = require("path");
+const connect = require("./src/services/dbConnect");
 const app = express();
-const User = require("./models/user");
-const Game_loop = require("./models/game_loop");
-const Axios = require("axios");
-require("dotenv").config();
+const http = require("http");
 var ObjectId = require("mongodb").ObjectID;
+const cookieParser = require("cookie-parser");
+const passport = require("passport");
+app.use(passport.initialize());
+app.use(cookieParser(process.env.PASSPORT_SECRET));
+app.use(passport.session());
+require("./passportConfig");
+
+/*****************
+ *MODELS
+ *****************/
 
 const GAME_LOOP_ID = "64a93f393638a7e25871f3dd";
-
-const http = require("http");
-const Stopwatch = require("statman-stopwatch");
-const { update } = require("./models/user");
+const Game_loop = require("./models/game_loop");
+const User = require("./models/user");
 const Bet = require("./models/bet");
 const Transaction = require("./models/Transaction");
-const sw = new Stopwatch(true);
+
+/*****************
+ *VIEW ENGINE CONFIG
+ *****************/
+app.set("views", path.join(__dirname, "views"));
+app.set("view engine", "jade");
+
 const server = http.createServer(app);
-const { Server } = require("socket.io");
-const io = new Server(server);
-// Connect to MongoDB
-mongoose.connect(process.env.MONGOOSE_DB_LINK, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+/*****************
+ *MIDDLEWARE
+ *****************/
+app.use(require("./src/services/middleware"));
+app.use(require("./src/routes/ROUTE_MOUNTER"));
+app.use("/public/img", express.static(path.join(__dirname, "public/img")));
+
+/*****************
+ *SERVER INSTANTIATION
+ *****************/
+
+app.listen(process.env.PORT, () => {
+  console.log(`Express running PORT ${process.env.PORT} working!`);
 });
 
-app.use(
-  cors({
-    origin: "http://localhost:3001",
-    credentials: true,
-    methods: "GET,POST,PUT,DELETE, PATCH",
-    maxAge: 3600,
-  })
-);
-app.set("trust proxy", 1);
+connect();
 
-// app.use(logger("dev"));
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true }));
-
-app.use(
-  session({
-    secret: process.env.PASSPORT_SECRET,
-    resave: true,
-    saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGOOSE_DB_LINK,
-      useUnifiedTopology: true,
-    }),
-    cookie: {
-      maxAge: 24 * 60 * 60 * 1000, //please change it based on your needs
-      secure: true,
-      sameSite: "none",
-    },
-  })
-);
-
-app.use(cookieParser(process.env.PASSPORT_SECRET));
-app.use(passport.initialize());
-app.use(passport.session());
-require("./passportConfig")(passport);
-
-// setup socket.io and register it with the server
-// const io = require("socket.io")(server, {
-//   cors: {
-//     origin: "https://wiggolive.com",
-//     methods: ["GET", "POST"],
-//   },
-// });
-
-// tell the application to listen on the port specified
-server.listen(process.env.PORT, function (err) {
-  if (err) {
-    throw err;
-  }
-  console.log("server listening on: ", ":", process.env.PORT);
-});
-// var currentConnections = {};
-
-const messages_list = [];
-let live_bettors_table = [];
-let betting_phase = false;
-let game_phase = false;
-let cashout_phase = true;
-let game_crash_value = -69;
-let sent_cashout = true;
-let active_player_id_list = [];
+/*****************
+ *SOCKET IO
+ *****************/
+const io = require("socket.io")(server);
 io.on("connection", async (socket) => {
   console.log(socket.id);
   io.emit("myconection");
@@ -276,8 +232,17 @@ io.on("connection", async (socket) => {
     }
   });
 });
-
-//Passport.js login/register system
+/*****************
+ *ROUTES
+ *****************/
+const messages_list = [];
+let live_bettors_table = [];
+let betting_phase = false;
+let game_phase = false;
+let cashout_phase = true;
+let game_crash_value = -69;
+let sent_cashout = true;
+let active_player_id_list = [];
 app.post("/login", (req, res, next) => {
   console.log(req.body);
   passport.authenticate("local", (err, user, info) => {
@@ -701,3 +666,5 @@ const loopUpdate = async () => {
     }
   }
 };
+
+module.exports = app;
