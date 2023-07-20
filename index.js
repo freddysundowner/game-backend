@@ -17,20 +17,28 @@ var ObjectId = require("mongodb").ObjectID;
 
 const GAME_LOOP_ID = "64a93f393638a7e25871f3dd";
 
-const { Server } = require("socket.io");
 const http = require("http");
 const Stopwatch = require("statman-stopwatch");
 const { update } = require("./models/user");
 const Bet = require("./models/bet");
 const Transaction = require("./models/Transaction");
 const sw = new Stopwatch(true);
-// Start Socket.io Server
 const server = http.createServer(app);
-const io = new Server(server, {
+
+// setup socket.io and register it with the server
+const io = require("socket.io")(server, {
   cors: {
-    origin: "*",
+    origin: "https://wiggolive.com",
     methods: ["GET", "POST"],
   },
+});
+
+// tell the application to listen on the port specified
+server.listen(process.env.PORT, "192.168.135.154", function (err) {
+  if (err) {
+    throw err;
+  }
+  console.log("server listening on: ", ":", process.env.PORT);
 });
 // var currentConnections = {};
 
@@ -160,7 +168,7 @@ io.on("connection", async (socket) => {
             bettorObject.bet_amount * current_multiplier;
           io.emit(
             "receive_live_betting_table",
-            JSON.stringify(live_bettors_table) 
+            JSON.stringify(live_bettors_table)
           );
 
           socket.emit("auto_cashout_early", bettorObject);
@@ -566,6 +574,13 @@ app.get("/retrieve_bet_history", async (req, res) => {
   let theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // io.emit("crash_history", theLoop.previous_crashes);
   return res.send(theLoop.previous_crashes);
+});
+app.get("/creategame", async (req, res) => {
+  await Game_loop().save(function (err, p, pp) {
+    console.log(err, p, pp);
+    console.log(p);
+    return res.json(p);
+  });
 });
 
 function checkAuthenticated(req, res, next) {
