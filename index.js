@@ -68,7 +68,6 @@ app.get("/", async (req, res) => {
   res.send({ default: "none" });
 });
 
-
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
   useNewUrlParser: true,
@@ -77,7 +76,6 @@ mongoose.connect(process.env.MONGOOSE_DB_LINK, {
 
 // app.set("trust proxy", 1);
 
-
 // setup socket.io and register it with the server
 // const io = require("socket.io")(server, {
 //   cors: {
@@ -85,7 +83,6 @@ mongoose.connect(process.env.MONGOOSE_DB_LINK, {
 //     methods: ["GET", "POST"],
 //   },
 // });
-
 
 const messages_list = [];
 let live_bettors_table = [];
@@ -537,7 +534,7 @@ app.get("/get_chat_history", async (req, res) => {
 
 app.get("/retrieve_active_bettors_list", async (req, res) => {
   io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
-  return;
+  res.json(live_bettors_table);
 });
 app.post("/depositaccount", async (req, res) => {
   var data = {
