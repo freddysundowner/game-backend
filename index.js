@@ -240,21 +240,22 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
   cors({
-    origin: 'https://wiggolive.com',  //Your Client, do not write '*'
+    origin: true,
     credentials: true,
   })
 );
+app.set("trust proxy", 1);
 app.use(
   session({
     secret: process.env.PASSPORT_SECRET,
     resave: true,
     saveUninitialized: false,
-    // store: MongoStore.create({ mongoUrl: process.env.MONGOOSE_DB_LINK }),
-    cookie: {
-      maxAge: 24 * 60 * 60 * 1000, //please change it based on your needs
-      secure: true,
-      sameSite: 'none'
-    }
+    store: MongoStore.create({ mongoUrl: process.env.MONGOOSE_DB_LINK }),
+    // cookie: {
+    //   maxAge: 24 * 60 * 60 * 1000, //please change it based on your needs
+    //   secure: true,
+    //   sameSite: 'none'
+    // }
   })
 );
 
@@ -271,7 +272,6 @@ app.post("/login", (req, res, next) => {
     if (!user) {
       res.json({ status: 400, message: "Username or Password is Wrong" });
     } else {
-      req.session.user = user._id;
       req.logIn(user, (err) => {
         if (err) throw err;
         res.json({ status: 200, message: "Logged in successfully" });
@@ -579,7 +579,7 @@ app.get("/retrieve_bet_history", async (req, res) => {
 
 function checkAuthenticated(req, res, next) {
   console.log(req.session.user);
-  if (req.session.user) {
+  if (req.isAuthenticated()) {
     return next();
   }
 
