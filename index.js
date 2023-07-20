@@ -28,7 +28,12 @@ const sw = new Stopwatch(true);// the express app is registered with the server
 const server = http.createServer(app);
 
 // setup socket.io and register it with the server
-const io = require('socket.io')(server);
+const io = require('socket.io')(server, {
+  cors: {
+    origin: "https://wiggolive.com",
+    methods: ["GET", "POST"]
+  }
+});
 
 // tell the application to listen on the port specified
 server.listen(process.env.PORT, function (err) {
