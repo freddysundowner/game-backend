@@ -573,7 +573,8 @@ app.get("/retrieve_bet_history", async (req, res) => {
 });
 
 function checkAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) {
+  console.log(req.session.user);
+  if (req.session.user) {
     return next();
   }
 
