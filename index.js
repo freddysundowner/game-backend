@@ -24,7 +24,6 @@ const { update } = require("./models/user");
 const Bet = require("./models/bet");
 const Transaction = require("./models/Transaction");
 const sw = new Stopwatch(true);
-
 // Start Socket.io Server
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -227,7 +226,7 @@ io.on("connection", async (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3000, () => {});
+server.listen(process.env.PORT || 3000, "192.168.135.47", () => {});
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
@@ -240,7 +239,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
   cors({
-    origin: false,
+    origin: true,
     credentials: true,
   })
 );
@@ -403,22 +402,6 @@ app.post("/send_bet", checkAuthenticated, async (req, res) => {
   res.json(`Bet placed for ${req.user.username}`);
 });
 
-app.get("/calculate_winnings", checkAuthenticated, async (req, res) => {
-  let theLoop = await Game_loop.findById(GAME_LOOP_ID);
-  playerIdList = theLoop.active_player_id_list;
-  crash_number = theLoop.multiplier_crash;
-  for (const playerId of playerIdList) {
-    const currUser = await User.findById(playerId);
-    if (currUser.payout_multiplier <= crash_number) {
-      currUser.balance += currUser.bet_amount * currUser.payout_multiplier;
-      await currUser.save();
-    }
-  }
-  theLoop.active_player_id_list = [];
-  await theLoop.save();
-  res.json("You clicked on the calcualte winnings button ");
-});
-
 app.get("/get_game_status", async (req, res) => {
   let theLoop = await Game_loop.findById(GAME_LOOP_ID);
   io.emit("crash_history", theLoop.previous_crashes);
@@ -539,6 +522,7 @@ app.post("/depositaccount", async (req, res) => {
     total_amount: req.body.amount,
     phone: "254" + req.body.phone.slice(1),
     socketid: req.body.socketid,
+    call_back: "https://game-backend-ten.vercel.app/deposit",
   };
   console.log("data", data);
   Axios({
@@ -604,7 +588,6 @@ function checkNotAuthenticated(req, res, next) {
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   playerIdList = theLoop.active_player_id_list;
-  console.log("cashout", playerIdList);
   crash_number = game_crash_value;
   for (const playerId of playerIdList) {
     const currUser = await User.findById(playerId);
