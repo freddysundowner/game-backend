@@ -67,12 +67,15 @@ server.listen(process.env.PORT, function (err) {
   }
   console.log("server listening on: ", ":", process.env.PORT);
 });
-const io = require("socket.io")(server);
+const io = require("socket.io")(server, {
+  cors: {
+    origin: "http://localhost:3002",
+    credentials: true,
+  },
+});
 app.get("/", async (req, res) => {
   res.send({ default: "none" });
 });
-
-
 
 // app.set("trust proxy", 1);
 
