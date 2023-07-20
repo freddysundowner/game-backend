@@ -36,7 +36,7 @@ const io = require('socket.io')(server, {
 });
 
 // tell the application to listen on the port specified
-server.listen(process.env.PORT, function (err) {
+server.listen(process.env.PORT, '192.168.135.154', function (err) {
   if (err) {
     throw err;
   }
@@ -596,9 +596,16 @@ app.get("/retrieve_bet_history", async (req, res) => {
   // io.emit("crash_history", theLoop.previous_crashes);
   return res.send(theLoop.previous_crashes);
 });
+app.get("/creategame", async (req, res) => {
+  await Game_loop().save(function (err, p, pp) {
+    console.log(err, p, pp);
+    console.log(p);
+    return res.json(p)
+  });
+});
+
 
 function checkAuthenticated(req, res, next) {
-  console.log(req.session.user);
   if (req.isAuthenticated()) {
     return next();
   }
