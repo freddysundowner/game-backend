@@ -1,57 +1,77 @@
 const mongoose = require("mongoose");
-mongoose.set("useFindAndModify", false);
+const MongoStore = require("connect-mongo");
 const express = require("express");
-const cors = require("cors");
 const passport = require("passport");
-const passportLocal = require("passport-local").Strategy;
+const http = require("http");
 const cookieParser = require("cookie-parser");
-const bcrypt = require("bcryptjs");
 const session = require("express-session");
-const MongoStore = require('connect-mongo');
+const cors = require("cors");
+const bcrypt = require("bcryptjs");
 const bodyParser = require("body-parser");
+
+const Bet = require("./models/bet");
+const Transaction = require("./models/Transaction");
+
+require("dotenv").config();
+const GAME_LOOP_ID = process.env.GAME_ID;
 const app = express();
+const server = http.createServer(app);
+
 const User = require("./models/user");
 const Game_loop = require("./models/game_loop");
 const Axios = require("axios");
 require("dotenv").config();
-var ObjectId = require("mongodb").ObjectID;
-
-const GAME_LOOP_ID = "64a93f393638a7e25871f3dd";
-
-// const { Server } = require("socket.io");
-const http = require("http");
-const Stopwatch = require("statman-stopwatch");
-const { update } = require("./models/user");
-const Bet = require("./models/bet");
-const Transaction = require("./models/Transaction");
-const sw = new Stopwatch(true);// the express app is registered with the server
-const server = http.createServer(app);
-
-// setup socket.io and register it with the server
-const io = require('socket.io')(server, {
-  cors: {
-    origin: "https://wiggolive.com",
-    methods: ["GET", "POST"]
-  }
+var ObjectId = require("mongodb").ObjectId;
+// Connect to MongoDB
+mongoose.connect(process.env.MONGOOSE_DB_LINK, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
 });
+var url = "https://wiggolive.com";
 
+
+const io = require("socket.io")(server, {
+  cors: {
+    origin: true,
+    methods: ["GET", "POST"],
+    credentials: true,
+  }, //
+});
 // tell the application to listen on the port specified
-server.listen(process.env.PORT, '192.168.135.154', function (err) {
+server.listen(process.env.PORT, function (err) {
   if (err) {
     throw err;
   }
-  console.log('server listening on: ', ':', process.env.PORT);
+  console.log("server listening on: ", ":", process.env.PORT);
 });
-// Start Socket.io Server
-// const server = app.listen(3000);
-// var io = require('socket.io')(server);
-// const io = new Server(server, {
-//   cors: {
-//     origin: "*",
-//     methods: ["GET", "POST"],
-//   },
-// });
-// var currentConnections = {};
+
+// Backend Setup
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
+app.use(
+  session({
+    secret: process.env.PASSPORT_SECRET,
+    resave: true,
+    saveUninitialized: true,
+
+  })
+);
+app.use(cookieParser(process.env.PASSPORT_SECRET));
+app.use(passport.initialize());
+app.use(passport.session());
+require("./passportConfig")(passport);
+
+
+
+app.get("/", async (req, res) => {
+  res.send({ default: "none" });
+});
 
 const messages_list = [];
 let live_bettors_table = [];
@@ -61,11 +81,17 @@ let cashout_phase = true;
 let game_crash_value = -69;
 let sent_cashout = true;
 let active_player_id_list = [];
-
-
+let connections = [];
 io.on("connection", async (socket) => {
-  console.log(socket.id);
-  io.emit("myconection");
+  connections.push(socket.id)
+  io.emit("myconection", connections);
+  socket.on("disconnect", async () => {
+    const index = connections.indexOf(socket.id);
+    if (index > -1) {
+      connections.splice(index, 1);
+    }
+    io.emit("myconection", connections);
+  });
 
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // console.log(theLoop);
@@ -148,8 +174,9 @@ io.on("connection", async (socket) => {
   socket.on("get_game_status", async (data) => {
     console.log("get game ststus");
     let theLoop = await Game_loop.findById(GAME_LOOP_ID);
+    console.log(theLoop.previous_crashes);
     io.emit("crash_history", theLoop.previous_crashes);
-    io.emit("get_round_id_list", theLoop.round_id_list);
+    //     io.emit("get_round_id_list", theLoop.round_id_list);
     var status;
     if (betting_phase == true) {
       status = { phase: "betting_phase", info: phase_start_time };
@@ -247,43 +274,6 @@ io.on("connection", async (socket) => {
   });
 });
 
-// server.listen(process.env.PORT || 3000, () => { });
-
-// Connect to MongoDB
-mongoose.connect(process.env.MONGOOSE_DB_LINK, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-
-// Backend Setup
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(
-  cors({
-    origin: true,
-    credentials: true,
-  })
-);
-app.set("trust proxy", 1);
-app.use(
-  session({
-    secret: process.env.PASSPORT_SECRET,
-    resave: true,
-    saveUninitialized: false,
-    store: MongoStore.create({ mongoUrl: process.env.MONGOOSE_DB_LINK }),
-    cookie: {
-      maxAge: 24 * 60 * 60 * 1000, //please change it based on your needs
-      secure: true,
-      sameSite: 'none'
-    }
-  })
-);
-
-app.use(cookieParser(process.env.PASSPORT_SECRET));
-app.use(passport.initialize());
-app.use(passport.session());
-require("./passportConfig")(passport);
-
 //Passport.js login/register system
 app.post("/login", (req, res, next) => {
   console.log(req.body);
@@ -315,8 +305,8 @@ app.post("/register", (req, res) => {
     return;
   }
 
-  var phone = req.body.username;
-  var username = req.body.phonenumber;
+  var phone = req.body.phonenumber;
+  var username = req.body.username;
 
   User.findOne({ phonenumber: phone }, async (err, doc) => {
     if (err) throw err;
@@ -334,13 +324,25 @@ app.post("/register", (req, res) => {
     }
   });
 });
-
-// Routes
+// Routes 
 // app.get("/user", async (req, res) => {
 app.get("/user", checkAuthenticated, async (req, res) => {
-  console.log("res", req.session);
   res.send(req.user);
 });
+function checkAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+
+  return res.send("No User Authentication");
+}
+
+function checkNotAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return res.redirect("/");
+  }
+  next();
+}
 
 app.get("/logout", (req, res) => {
   req.logout();
@@ -434,7 +436,7 @@ app.post("/send_bet", checkAuthenticated, async (req, res) => {
 app.get("/get_game_status", async (req, res) => {
   let theLoop = await Game_loop.findById(GAME_LOOP_ID);
   io.emit("crash_history", theLoop.previous_crashes);
-  io.emit("get_round_id_list", theLoop.round_id_list);
+  //   io.emit("get_round_id_list", theLoop.round_id_list);
   if (betting_phase == true) {
     res.json({ phase: "betting_phase", info: phase_start_time });
     return;
@@ -543,15 +545,17 @@ app.get("/get_chat_history", async (req, res) => {
 
 app.get("/retrieve_active_bettors_list", async (req, res) => {
   io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
-  return;
+  res.json(live_bettors_table);
 });
-app.post("/depositaccount", async (req, res) => {
+app.post("/depositaccount", checkAuthenticated, async (req, res) => {
+  console.log(req.user);
   var data = {
     amount: req.body.amount,
     total_amount: req.body.amount,
-    phone: "254" + req.body.phone.slice(1),
+    phone: "254" + req.user.phonenumber.slice(1),
+    id: req.user._id,
     socketid: req.body.socketid,
-    call_back: "https://game-backend-ten.vercel.app/deposit",
+    call_back: "https://api.wiggolive.com/deposit",
   };
   console.log("data", data);
   Axios({
@@ -564,7 +568,6 @@ app.post("/depositaccount", async (req, res) => {
   });
 });
 app.post("/deposit", async (req, res) => {
-  console.log(req.body);
   var transaction_code = req.body.transactionid;
   const transactions = await Transaction.find({
     transaction_code: transaction_code,
@@ -574,11 +577,13 @@ app.post("/deposit", async (req, res) => {
   } else {
     var amount = parseInt(req.body.amount);
     var socketid = req.body.socketid;
-    io.to(socketid).emit("deposit_success", amount);
+    var id = req.body.id;
+    //     io.to(socketid).emit("deposit_success", amount);
     var bf = req.body.phone.slice(3);
     var phone = "0" + bf;
-    const currUser = await User.findOne({ username: phone });
+    const currUser = await User.findOne({ _id: id });
     currUser.balance += amount;
+    io.to(socketid).emit("deposit_success", currUser);
     currUser.save();
 
     const transaction = new Transaction({
@@ -600,25 +605,13 @@ app.get("/creategame", async (req, res) => {
   await Game_loop().save(function (err, p, pp) {
     console.log(err, p, pp);
     console.log(p);
-    return res.json(p)
+    return res.json(p);
   });
 });
 
 
-function checkAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
 
-  return res.send("No User Authentication");
-}
-
-function checkNotAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) {
-    return res.redirect("/");
-  }
-  next();
-}
+// app.listen(5000, () => { });
 
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
@@ -670,16 +663,18 @@ const loopUpdate = async () => {
       await update_loop.updateOne({
         $push: { previous_crashes: game_crash_value },
       });
-      await update_loop.updateOne({ $unset: { "previous_crashes.0": 1 } });
-      await update_loop.updateOne({ $pull: { previous_crashes: null } });
+      // await update_loop.updateOne({ $unset: { "previous_crashes.0": 1 } });
+      // await update_loop.updateOne({ $pull: { previous_crashes: null } });
       const the_round_id_list = update_loop.round_id_list;
       await update_loop.updateOne({
         $push: {
           round_id_list: the_round_id_list[the_round_id_list.length - 1] + 1,
         },
       });
+
       await update_loop.updateOne({ $unset: { "round_id_list.0": 1 } });
       await update_loop.updateOne({ $pull: { round_id_list: null } });
+
     }
 
     if (time_elapsed > 3) {
@@ -702,7 +697,7 @@ const loopUpdate = async () => {
       let theLoop = await Game_loop.findById(GAME_LOOP_ID);
       io.emit("crash_history", theLoop.previous_crashes);
       io.emit("get_round_id_list", theLoop.round_id_list);
-      // console.log(theLoop);
+      // console.log(theLoop); 
       live_bettors_table = [];
       phase_start_time = Date.now();
     }
