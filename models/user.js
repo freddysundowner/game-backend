@@ -24,6 +24,10 @@ const user = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  socketid: {
+    type: String,
+    default: ""
+  },
 
 });
 
