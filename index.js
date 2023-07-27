@@ -8,7 +8,7 @@ const session = require("express-session");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const bodyParser = require("body-parser");
-const GAME_LOOP_ID = "64b90ebbb2cc7b24e1854c58";
+const GAME_LOOP_ID = "64b91187832d816e58a5282c";
 
 const Bet = require("./models/bet");
 const Transaction = require("./models/Transaction");
@@ -26,7 +26,7 @@ var ObjectId = require("mongodb").ObjectId;
 mongoose.connect(process.env.MONGOOSE_DB_LINK, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-  useFindAndModify: true,
+  useFindAndModify: false,
 });
 var url = "https://wiggolive.com";
 
@@ -100,6 +100,7 @@ io.on("connection", async (socket) => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // console.log(theLoop);
   socket.on("bet", async (data) => {
+    console.log("bet data", data);
     var bet_amount = data.bet_amount;
     var payout_multiplier = data.payout_multiplier;
     var userid = data.userid;
@@ -129,6 +130,10 @@ io.on("connection", async (socket) => {
     }
     if (bet_amount > thisUser.balance) {
       console.log("NO ENOUGH MONEY IN THE WALLET");
+      socket.emit("success_betting", {
+        status: false,
+        message: "NO ENOUGH MONEY IN THE WALLET",
+      });
       return;
     }
     thisUser.balance = thisUser.balance - bet_amount;
@@ -148,7 +153,11 @@ io.on("connection", async (socket) => {
     };
     live_bettors_table.push(info_json);
     io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
-    socket.emit("success_betting", info_json);
+    socket.emit("success_betting", {
+      status: true,
+      message: "",
+      data: info_json,
+    });
 
     await User.findByIdAndUpdate(userid, {
       bet_amount: bet_amount,
@@ -233,7 +242,7 @@ io.on("connection", async (socket) => {
     if (!game_phase) {
       return;
     }
-    // console.log("theLoop", theLoop);
+    console.log("theLoop", live_bettors_table);
     let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
     if (current_multiplier <= game_crash_value) {
@@ -246,9 +255,13 @@ io.on("connection", async (socket) => {
           bettorObject.b_bet_live = false;
           bettorObject.userdata.balance +=
             bettorObject.userdata.bet_amount * current_multiplier;
-          socket.emit("manual_cashout_early", {
+          console.log({
+            amount: bettorObject.amount * current_multiplier,
             user: bettorObject.userdata,
+          });
+          socket.emit("manual_cashout_early", {
             amount: bettorObject.bet_amount * current_multiplier,
+            user: bettorObject.userdata,
           });
           io.emit(
             "receive_live_betting_table",
@@ -262,6 +275,7 @@ io.on("connection", async (socket) => {
             $pull: { active_player_id_list: userid },
           });
 
+          console.log(bettorObject);
           await Bet.findByIdAndUpdate(bettorObject.betId, {
             cashout_multiplier: bettorObject.cashout_multiplier,
             profit: bettorObject.profit,
@@ -270,6 +284,9 @@ io.on("connection", async (socket) => {
           break;
         }
       }
+
+      //res.json(currUser);
+    } else {
     }
   });
 });
@@ -541,7 +558,7 @@ app.get("/retrieve_active_bettors_list", async (req, res) => {
   res.json(live_bettors_table);
 });
 app.post("/depositaccount", checkAuthenticated, async (req, res) => {
-  console.log(req.user);
+  console.log(req.body);
   var data = {
     amount: req.body.amount,
     total_amount: req.body.amount,
@@ -557,6 +574,11 @@ app.post("/depositaccount", checkAuthenticated, async (req, res) => {
     withCredentials: true,
     url: "https://sunpay.co.ke/api/mpesac2b",
   }).then(async (res) => {
+    const currUser = await User.findOne({ _id: req.user._id });
+    currUser.socketid = req.body.socketid;
+    console.log(currUser);
+    currUser.save();
+
     console.log(res.data);
   });
 });
@@ -660,12 +682,13 @@ app.post("/deposit", async (req, res) => {
     res.json({ status: 500, message: "dublicate" });
   } else {
     var amount = parseInt(req.body.amount);
-    var socketid = req.body.socketid;
     var id = req.body.id;
     //     io.to(socketid).emit("deposit_success", amount);
     var bf = req.body.phone.slice(3);
     var phone = req.body.phone.length == 10 ? req.body.phone : "0" + bf;
     const currUser = await User.findOne({ phonenumber: phone });
+    var socketid = currUser.socketid;
+    console.log(currUser);
     currUser.balance += amount;
     io.to(socketid).emit("deposit_success", currUser);
     currUser.save();
@@ -684,6 +707,12 @@ app.get("/retrieve_bet_history", async (req, res) => {
   let theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // io.emit("crash_history", theLoop.previous_crashes);
   return res.send(theLoop.previous_crashes);
+});
+app.get("/transactions", async (req, res, next) => {
+  var transactions = await Transaction.find({ user: req.user._id }).sort({
+    createdAt: -1,
+  });
+  res.json(transactions);
 });
 app.get("/creategame", async (req, res) => {
   await Game_loop().save(function (err, p, pp) {
