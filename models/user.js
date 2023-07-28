@@ -4,6 +4,10 @@ const user = new mongoose.Schema({
     type: String,
     required: true
   },
+  referal: {
+    type: String,
+    default: null
+  },
   password: {
     type: String,
     required: true
@@ -11,6 +15,10 @@ const user = new mongoose.Schema({
   balance: {
     type: Number,
     default: 1000
+  },
+  bonus: {
+    type: Number,
+    default: 0
   },
   phonenumber: {
     type: String,

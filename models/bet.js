@@ -13,7 +13,7 @@ const Bet = new mongoose.Schema({
     },
     profit: {
         type: Number,
-        default: 0 
+        default: 0
     },
     bet_amount: {
         type: Number,
