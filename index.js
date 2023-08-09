@@ -379,16 +379,19 @@ app.post("/register", (req, res) => {
       const newUser = new User({
         username: username,
         password: hashedPassword,
-        phonenumber: phone,
-        referal
+        phonenumber: phone
       });
       await newUser.save();
 
-      if (referal) {
-        var userId = Buffer.from(referal, 'base64').toString()
-
-        await User.findByIdAndUpdate(userId, { $inc: { bonus: 1 } });
-      }
+      /*
+            if (referal) {
+              console.log(referal)
+              var userId = Buffer.from(referal, 'base64').toString()
+              console.log(userId)
+      
+              await User.findByIdAndUpdate(userId, { $inc: { bonus: 1 } });
+            }
+      */
 
       res.json({ status: 200, message: "Registered in successfully" });
     }
@@ -468,14 +471,20 @@ app.post("/depositaccount", checkAuthenticated, async (req, res) => {
     method: "POST",
     data: data,
     withCredentials: true,
-    url: "https://sunpay.co.ke/api/mpesac2b",
-  }).then(async (res) => {
+    url: "https://sunpay.co.ke/mpesa/deposit",
+  }).then(async (ress) => {
+    console.log(ress.data);
+
     const currUser = await User.findOne({ _id: req.user._id });
-    currUser.socketid = req.body.socketid;
+    currUser.socketid = req.user.socketid;
     console.log(currUser);
     currUser.save();
+    res.json(ress.data);
+    if (ress.data !== 200) {
+      return;
+    }
 
-    console.log(res.data);
+    console.log(ress.data);
   });
 });
 
@@ -491,7 +500,7 @@ app.post("/verify_mpesa_code", checkAuthenticated, async (req, res) => {
     method: "POST",
     data: data,
     withCredentials: true,
-    url: "https://sunpay.co.ke/api/mpesa/status",
+    url: "https://sunpay.co.ke/mpesa/query",
   }).then(async (ress) => {
     console.log(ress.data);
     return res.json(ress.data);
@@ -499,10 +508,11 @@ app.post("/verify_mpesa_code", checkAuthenticated, async (req, res) => {
 });
 
 app.post("/verify_code", async (req, res) => {
-  console.log(req.query);
+  var query = JSON.parse(req.query.payload);
+  console.log(query);
   console.log(req.body);
   if (req.body["Result"]["ResultParameters"] === undefined) {
-    io.to(req.query.socketId).emit("code_verified", {
+    io.to(query.socketId).emit("code_verified", {
       status: 500,
       message: "invalid mpesa code, please correct and try again",
     });
@@ -523,7 +533,7 @@ app.post("/verify_code", async (req, res) => {
     }
   });
   if (transcode == null || transcode == "" || phone == null || phone == "") {
-    io.to(req.query.socketId).emit("code_verified", {
+    io.to(query.socketId).emit("code_verified", {
       status: 500,
       message: "technical error happened",
     });
@@ -535,7 +545,8 @@ app.post("/verify_code", async (req, res) => {
   });
 
   if (transactions.length > 0) {
-    io.to(req.query.socketId).emit("code_verified", {
+    console.log("Transaction code has been used already")
+    io.to(query.socketId).emit("code_verified", {
       status: 500,
       message: "Transaction code has been used already",
     });
@@ -556,7 +567,7 @@ app.post("/verify_code", async (req, res) => {
     });
     await transaction.save();
 
-    io.to(req.query.socketId).emit("code_verified", {
+    io.to(query.socketId).emit("code_verified", {
       status: 200,
       message: "successfully deposited",
       user: currUser,
@@ -568,6 +579,27 @@ app.post("/verify_code", async (req, res) => {
     });
   }
 });
+app.post("/withdraw", checkAuthenticated, async (req, res) => {
+  let amount = req.body.amount;
+  if (amount > req.user.balance) {
+    res.json({ status: 400, message: "you cannot withdraw more than " + req.user.balance })
+  } else {
+    Axios({
+      method: "POST",
+      data: { amount, phone: "254" + req.user.phonenumber.slice(1) },
+      withCredentials: true,
+      url: "https://sunpay.co.ke/mpesa/withdraw",
+    }).then(async (ress) => {
+      console.log(ress.data);
+      if (ress.data.status == 200) { 
+        const currUser = await User.findOne({ _id: req.user._id });
+        currUser.balance -= amount;
+        currUser.save();
+      }
+      res.json(ress.data);
+    }); 
+  }
+})
 app.post("/deposit", async (req, res) => {
   var transaction_code = req.body.transactionid;
   console.log(req.body);
@@ -580,9 +612,14 @@ app.post("/deposit", async (req, res) => {
     var amount = parseInt(req.body.amount);
     var id = req.body.id;
     //     io.to(socketid).emit("deposit_success", amount);
-    var bf = req.body.phone.slice(3);
-    var phone = req.body.phone.length == 10 ? req.body.phone : "0" + bf;
+    var bf = req.body.phone ? req.body.phone.slice(3) : req.body.phone;
+    var phone = req.body.phone ? req.body.phone.length == 10 ? req.body.phone : "0" + bf : "";
     const currUser = await User.findOne({ phonenumber: phone });
+
+    if (!currUser) {
+      console.log("failed")
+      return;
+    }
     var socketid = currUser.socketid;
     console.log(currUser);
     currUser.balance += amount;
