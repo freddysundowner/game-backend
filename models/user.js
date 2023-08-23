@@ -8,6 +8,10 @@ const user = new mongoose.Schema({
     type: String,
     default: null
   },
+  avatar: {
+    type: String,
+    default: 'av-1.png'
+  },
   password: {
     type: String,
     required: true
@@ -37,6 +41,12 @@ const user = new mongoose.Schema({
     default: ""
   },
 
-});
+},
+  {
+    timestamps: true,
+    autoCreate: true, // auto create collection
+    autoIndex: true, // auto create indexes
+  });
 
 module.exports = mongoose.model("User", user);
+ 

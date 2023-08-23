@@ -7,6 +7,7 @@ const session = require("express-session");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const bodyParser = require("body-parser");
+const MongoDBStore = require('connect-mongodb-session')(session);
 
 const Bet = require("./models/bet");
 const Transaction = require("./models/Transaction");
@@ -14,19 +15,26 @@ const Transaction = require("./models/Transaction");
 require("dotenv").config();
 const GAME_LOOP_ID = process.env.GAME_LOOP_ID;
 const app = express();
-const server = http.createServer(app);
-
+const server = http.createServer(app); 
+ 
 const User = require("./models/user");
 const Game_loop = require("./models/game");
 const Axios = require("axios");
 require("dotenv").config();
 var ObjectId = require("mongodb").ObjectId;
 // Connect to MongoDB
-mongoose.connect(process.env.MONGOOSE_DB_LINK, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  useFindAndModify: false,
-});
+const connect = function () {
+  mongoose.connect(process.env.MONGOOSE_DB_LINK, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    useFindAndModify: false,
+  }, (err) => {
+    if (err) {
+      setTimeout(connect, 5000);
+    }
+  });
+}
+connect();
 
 const io = require("socket.io")(server, {
   cors: {
@@ -52,11 +60,22 @@ app.use(
     credentials: true,
   })
 );
+const store = new MongoDBStore({
+  uri: process.env.MONGOOSE_DB_LINK,
+  // The 'expires' option specifies how long after the last time this session was used should the session be deleted.
+  // Effectively this logs out inactive users without really notifying the user. The next time they attempt to
+  // perform an authenticated action they will get an error. This is currently set to 1 hour (in milliseconds).
+  // What you ultimately want to set this to will be dependent on what your application actually does.
+  // Banks might use a 15 minute session, while something like social media might be a full month.
+  expires: 1000 * 60 * 60,
+});
 app.use(
   session({
     secret: process.env.PASSPORT_SECRET,
-    resave: true,
-    saveUninitialized: true,
+    store: store,
+
+    resave: false,
+    saveUninitialized: false,
   })
 );
 app.use(cookieParser(process.env.PASSPORT_SECRET));
@@ -291,21 +310,40 @@ io.on("connection", async (socket) => {
   });
 });
 
-//Passport.js login/register system
-app.post("/login", (req, res, next) => {
-  console.log(req.body);
-  passport.authenticate("local", (err, user, info) => {
+//Passport.js login/register system 
+app.post("/login",  (req, res, next) => { 
+  passport.authenticate("local", async (err, user, info) => {
     if (err) throw err;
     if (!user) {
       res.json({ status: 400, message: "Username or Password is Wrong" });
     } else {
-      req.logIn(user, (err) => {
+      let existingSessions = await mongoose.connection.db.collection('sessions').find({
+        'session.passport.user': user._id.toString(),
+        _id: {
+          $ne: req.session._id
+        }
+      }).toArray();
+
+      if (existingSessions.length) {
+        await mongoose.connection.db.collection('sessions').deleteMany({
+          _id: {
+            $in: existingSessions.map(({ _id }) => _id)
+          }
+        });
+      }
+      req.logIn(user, async (err) => {
         if (err) throw err;
+        io.to(user.socketid).emit('update_user');
+
+        await User.findByIdAndUpdate(user._id, {
+          socketid: req.body.socketid,
+        });
+
         res.json({ status: 200, message: "Logged in successfully" });
       });
     }
   })(req, res, next);
-});
+}); 
 
 app.post("/changepassword", checkAuthenticated, async (req, res) => {
   const { newPassword, confirmNewPassword } = req.body;
@@ -398,9 +436,15 @@ app.post("/register", (req, res) => {
   });
 });
 // Routes
-// app.get("/user", async (req, res) => {
 app.get("/user", checkAuthenticated, async (req, res) => {
   res.send(req.user);
+});
+
+app.post("/user/update", checkAuthenticated, async (req, res) => {
+  console.log(req.body);
+  const response = await User.findOneAndUpdate({ _id: req.user._id }, req.body, { new: true });
+  console.log(response);
+  res.send(response) 
 });
 function checkAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
@@ -591,13 +635,13 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
       url: "https://sunpay.co.ke/mpesa/withdraw",
     }).then(async (ress) => {
       console.log(ress.data);
-      if (ress.data.status == 200) { 
+      if (ress.data.status == 200) {
         const currUser = await User.findOne({ _id: req.user._id });
         currUser.balance -= amount;
         currUser.save();
       }
       res.json(ress.data);
-    }); 
+    });
   }
 })
 app.post("/deposit", async (req, res) => {
@@ -683,7 +727,7 @@ const pat = setInterval(async () => {
 const loopUpdate = async () => {
   let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
   if (betting_phase) {
-    if (time_elapsed > 6) {
+    if (time_elapsed > 10) {
       sent_cashout = false;
       betting_phase = false;
       game_phase = true;
