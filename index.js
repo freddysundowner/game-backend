@@ -454,12 +454,7 @@ function checkAuthenticated(req, res, next) {
   return res.send("No User Authentication");
 }
 
-function checkNotAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) {
-    return res.redirect("/");
-  }
-  next();
-}
+
 
 app.get("/logout", (req, res) => {
   req.logout();

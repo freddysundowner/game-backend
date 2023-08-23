@@ -29,7 +29,7 @@ const game_loop = new mongoose.Schema({
     default: -1
   },
   previous_crashes: {
-    type: [Number],
+    type: [Number], 
     default: []
   },
   round_id_list: {
@@ -39,8 +39,8 @@ const game_loop = new mongoose.Schema({
   chat_messages_list: {
     type: [],
     default: []
-  },
+  }, 
 
-});
+}); 
 
 module.exports = mongoose.model("game_loop", game_loop);
