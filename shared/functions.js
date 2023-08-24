@@ -40,18 +40,24 @@ async function sendSms(phonenumber) {
         sender_name: process.env.SMS_SHORT_CODE,
         service_id: 0,
         message: `Your OTP code is ${code}`
-    }; 
-    return {
-        status: 200,
-        code
     };
-    console.log(data);
 
     const headers = {
         'h_api_key': apiKey,
         'Content-Type': 'application/json'
     };
-    return await axios.post(url, data, { headers });;
+    let reponse = await axios.post(url, data, { headers });;
+    if (reponse.data[0].status_desc === 'Success') {
+        return {
+            status: 200,
+            code
+        };
+    } else {
+        return {
+            status: 400,
+            code: null
+        };
+    }
 
 }
 
