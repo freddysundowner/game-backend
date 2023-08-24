@@ -63,11 +63,6 @@ app.use(
 );
 const store = new MongoDBStore({
   uri: process.env.MONGOOSE_DB_LINK,
-  // The 'expires' option specifies how long after the last time this session was used should the session be deleted.
-  // Effectively this logs out inactive users without really notifying the user. The next time they attempt to
-  // perform an authenticated action they will get an error. This is currently set to 1 hour (in milliseconds).
-  // What you ultimately want to set this to will be dependent on what your application actually does.
-  // Banks might use a 15 minute session, while something like social media might be a full month.
   expires: 1000 * 60 * 60,
 });
 app.use(
@@ -88,14 +83,12 @@ app.get("/", async (req, res) => {
   res.send({ default: "none" });
 });
 
-const messages_list = [];
 let live_bettors_table = [];
 let betting_phase = false;
 let game_phase = false;
 let cashout_phase = true;
 let game_crash_value = -69;
 let sent_cashout = true;
-let active_player_id_list = [];
 let connections = [];
 
 io.on("connection", async (socket) => {
@@ -218,7 +211,6 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("auto_cashout_early", async (data) => {
-    console.log("auto_cashout_early", data);
     var userid = data.userid;
     var payout_multiplier = data.payout_multiplier;
     if (!game_phase) {
@@ -274,10 +266,6 @@ io.on("connection", async (socket) => {
           bettorObject.b_bet_live = false;
           bettorObject.userdata.balance +=
             bettorObject.userdata.bet_amount * current_multiplier;
-          console.log({
-            amount: bettorObject.amount * current_multiplier,
-            user: bettorObject.userdata,
-          });
           socket.emit("manual_cashout_early", {
             amount: bettorObject.bet_amount * current_multiplier,
             user: bettorObject.userdata,
@@ -289,7 +277,6 @@ io.on("connection", async (socket) => {
           const currUser = await User.findById(userid);
           currUser.balance = bettorObject.userdata.balance;
           await currUser.save();
-          // active_player_id_list.
           await theLoop.updateOne({
             $pull: { active_player_id_list: userid },
           });
@@ -303,8 +290,6 @@ io.on("connection", async (socket) => {
           break;
         }
       }
-
-      //res.json(currUser);
     } else {
     }
   });
