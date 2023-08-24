@@ -15,11 +15,12 @@ const Transaction = require("./models/Transaction");
 require("dotenv").config();
 const GAME_LOOP_ID = process.env.GAME_LOOP_ID;
 const app = express();
-const server = http.createServer(app); 
- 
+const server = http.createServer(app);
+
 const User = require("./models/user");
 const Game_loop = require("./models/game");
 const Axios = require("axios");
+const functions = require("./shared/functions");
 require("dotenv").config();
 var ObjectId = require("mongodb").ObjectId;
 // Connect to MongoDB
@@ -261,7 +262,6 @@ io.on("connection", async (socket) => {
     if (!game_phase) {
       return;
     }
-    console.log("manual_cashout_early live_bettors_table ", live_bettors_table);
     let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
     if (current_multiplier <= game_crash_value) {
@@ -310,8 +310,13 @@ io.on("connection", async (socket) => {
   });
 });
 
-//Passport.js login/register system 
-app.post("/login",  (req, res, next) => { 
+app.post("/login", (req, res, next) => {
+  let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber)
+  if (phonewithplus === null) {
+    res.json({ status: 400, message: "Phone number is invalid" });
+    return;
+  }
+  req.body.phonenumber = functions.getPhoneNumberWithoutPlus(phonewithplus);
   passport.authenticate("local", async (err, user, info) => {
     if (err) throw err;
     if (!user) {
@@ -343,7 +348,7 @@ app.post("/login",  (req, res, next) => {
       });
     }
   })(req, res, next);
-}); 
+});
 
 app.post("/changepassword", checkAuthenticated, async (req, res) => {
   const { newPassword, confirmNewPassword } = req.body;
@@ -381,6 +386,75 @@ app.post("/changepassword", checkAuthenticated, async (req, res) => {
 
 });
 
+app.post('/sendotp', async (req, res) => {
+  let phonenumber = functions.validateKenyanPhoneNumber(req.body.phonenumber);
+  let phonenumberwithoutplus = functions.getPhoneNumberWithoutPlus(phonenumber);
+  if (phonenumber === null) {
+    res.json({
+      status: 400,
+      "message": "invalid phone number"
+    });
+    return;
+  }
+  let user = await User.findOne({ 'phonenumber': phonenumberwithoutplus })
+  if (user) {
+    let response = await functions.sendSms(phonenumber);
+    console.log(response);
+    if (response.status === 200) {
+
+      const otpExpiry = Date.now() + 5 * 60 * 1000; // OTP expiry set to 5 minutes from now
+
+      req.session.otp = { code: response.code, expiry: otpExpiry };
+      req.session.phonenumber = phonenumber;
+      res.json({
+        status: response.status,
+        message: "Enter OTP code send to " + phonenumberwithoutplus
+      });
+    } else {
+      res.json({
+        status: response.status,
+        message: "Error sending otp code to " + phonenumberwithoutplus
+      });
+    }
+    console.log(response);
+  } else {
+    res.json({
+      status: 400,
+      "message": "You do not have an account with this number " + phonenumberwithoutplus
+    });
+  }
+})
+app.post('/resetpassword', async (req, res) => {
+  const password = req.body.password;
+  const confirmpassword = req.body.confirmpassword;
+  if (password !== confirmpassword) {
+    return res.json({ message: 'password must match', status: 400 });
+  }
+  if (password === confirmpassword) {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log(req.session.phonenumber);
+    let user = await User.findOneAndUpdate({ phonenumber: functions.getPhoneNumberWithoutPlus(req.session.phonenumber) }, { $set: { password: hashedPassword } })
+    if (user) {
+      return res.json({ message: 'passsord reset successfully', status: 200 });
+    } else {
+      return res.json({ message: 'passsord reset failed', status: 400 });
+    }
+
+  }
+})
+app.post('/verifyotp', async (req, res) => {
+  const userOTP = req.body.otp;
+  const sessionOTP = req.session.otp;
+  if (!sessionOTP || sessionOTP.expiry < Date.now()) {
+    return res.json({ message: 'OTP expired or not generated', status: 400 });
+  }
+  if (parseInt(userOTP) === sessionOTP.code) {
+    delete req.session.otp; // Remove OTP from session after successful verification
+    return res.json({ message: 'OTP verified successfully', status: 200 });
+  } else {
+    return res.json({ message: 'Incorrect OTP', status: 400 });
+  }
+})
 app.post("/register", (req, res) => {
   if (req.body.password < 3) {
     res.json({
@@ -400,9 +474,12 @@ app.post("/register", (req, res) => {
     res.json({ status: 400, message: "Phone number is required" });
     return;
   }
-
-  console.log(req.body);
-  var phone = req.body.phonenumber;
+  let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber)
+  if (phonewithplus === null) {
+    res.json({ status: 400, message: "Phone number is invalid" });
+    return;
+  }
+  let phone = functions.getPhoneNumberWithoutPlus(phonewithplus);
   var username = req.body.username;
   var referal = req.body.referal;
 
@@ -441,10 +518,8 @@ app.get("/user", checkAuthenticated, async (req, res) => {
 });
 
 app.post("/user/update", checkAuthenticated, async (req, res) => {
-  console.log(req.body);
   const response = await User.findOneAndUpdate({ _id: req.user._id }, req.body, { new: true });
-  console.log(response);
-  res.send(response) 
+  res.send(response)
 });
 function checkAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
@@ -471,7 +546,6 @@ app.get("/multiply", checkAuthenticated, async (req, res) => {
 });
 
 app.get("/generate_crash_value", async (req, res) => {
-  console.log("generate_crash_value");
   const randomInt = Math.floor(Math.random() * 6) + 1;
   const game_loop = await Game_loop.findById(GAME_LOOP_ID);
   game_loop.multiplier_crash = randomInt;
@@ -496,50 +570,41 @@ app.get("/retrieve_active_bettors_list", async (req, res) => {
   res.json(live_bettors_table);
 });
 app.post("/depositaccount", checkAuthenticated, async (req, res) => {
-  console.log(req.body);
   var data = {
     amount: req.body.amount,
     total_amount: req.body.amount,
     phone: "254" + req.user.phonenumber.slice(1),
     id: req.user._id,
     socketid: req.body.socketid,
-    call_back: "https://api.wiggolive.com/deposit",
+    call_back: process.env.MPESA_DEPOSIT_CALLBACK,
   };
-  console.log("data", data);
   Axios({
     method: "POST",
     data: data,
     withCredentials: true,
-    url: "https://sunpay.co.ke/mpesa/deposit",
+    url: process.env.MPESA_DEPOSIT_URL
   }).then(async (ress) => {
-    console.log(ress.data);
-
     const currUser = await User.findOne({ _id: req.user._id });
     currUser.socketid = req.user.socketid;
-    console.log(currUser);
     currUser.save();
     res.json(ress.data);
     if (ress.data !== 200) {
       return;
     }
-
-    console.log(ress.data);
   });
 });
 
 app.post("/verify_mpesa_code", checkAuthenticated, async (req, res) => {
-  console.log(req.user);
   var data = {
     code: req.body.code,
-    call_back: "https://api.wiggolive.com/verify_code",
+    call_back: process.env.VERIFY_MPESA_CODE_CALLBACK,
     socketId: req.body.socketid,
   };
-  console.log("data", data);
   Axios({
     method: "POST",
     data: data,
     withCredentials: true,
-    url: "https://sunpay.co.ke/mpesa/query",
+    url: process.env.MPESA_QUERY,
   }).then(async (ress) => {
     console.log(ress.data);
     return res.json(ress.data);
@@ -548,8 +613,6 @@ app.post("/verify_mpesa_code", checkAuthenticated, async (req, res) => {
 
 app.post("/verify_code", async (req, res) => {
   var query = JSON.parse(req.query.payload);
-  console.log(query);
-  console.log(req.body);
   if (req.body["Result"]["ResultParameters"] === undefined) {
     io.to(query.socketId).emit("code_verified", {
       status: 500,
@@ -561,7 +624,6 @@ app.post("/verify_code", async (req, res) => {
   var phone, amount, transcode;
   req.body["Result"]["ResultParameters"]["ResultParameter"].forEach((e, r) => {
     if (e["Key"] == "DebitPartyName") {
-      console.log(e["Value"]);
       phone = e["Value"].split(" ")[0];
     }
     if (e["Key"] == "ReceiptNo") {
@@ -584,7 +646,6 @@ app.post("/verify_code", async (req, res) => {
   });
 
   if (transactions.length > 0) {
-    console.log("Transaction code has been used already")
     io.to(query.socketId).emit("code_verified", {
       status: 500,
       message: "Transaction code has been used already",
@@ -593,10 +654,8 @@ app.post("/verify_code", async (req, res) => {
   } else {
     var bf = phone.slice(3);
     var phone = phone.length == 10 ? phone : "0" + bf;
-    console.log(phone, amount, transcode);
     const currUser = await User.findOne({ phonenumber: phone });
     currUser.balance += amount;
-    console.log(currUser);
     currUser.save();
 
     const transaction = new Transaction({
@@ -627,7 +686,7 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
       method: "POST",
       data: { amount, phone: "254" + req.user.phonenumber.slice(1) },
       withCredentials: true,
-      url: "https://sunpay.co.ke/mpesa/withdraw",
+      url: process.env.MPESA_WITHDRAW_URL,
     }).then(async (ress) => {
       console.log(ress.data);
       if (ress.data.status == 200) {
@@ -641,7 +700,6 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
 })
 app.post("/deposit", async (req, res) => {
   var transaction_code = req.body.transactionid;
-  console.log(req.body);
   const transactions = await Transaction.find({
     transaction_code: transaction_code,
   });
@@ -649,8 +707,6 @@ app.post("/deposit", async (req, res) => {
     res.json({ status: 500, message: "dublicate" });
   } else {
     var amount = parseInt(req.body.amount);
-    var id = req.body.id;
-    //     io.to(socketid).emit("deposit_success", amount);
     var bf = req.body.phone ? req.body.phone.slice(3) : req.body.phone;
     var phone = req.body.phone ? req.body.phone.length == 10 ? req.body.phone : "0" + bf : "";
     const currUser = await User.findOne({ phonenumber: phone });
@@ -660,7 +716,6 @@ app.post("/deposit", async (req, res) => {
       return;
     }
     var socketid = currUser.socketid;
-    console.log(currUser);
     currUser.balance += amount;
     io.to(socketid).emit("deposit_success", { user: currUser, amount });
     currUser.save();
@@ -694,7 +749,6 @@ app.get("/creategame", async (req, res) => {
   });
 });
 
-// app.listen(5000, () => { });
 
 const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
@@ -752,16 +806,7 @@ const loopUpdate = async () => {
           },
         },
       });
-      //       await update_loop.updateOne({ $unset: { "previous_crashes.0": 1 } });
       await update_loop.updateOne({ $pull: { previous_crashes: null } });
-      // const the_round_id_list = update_loop.round_id_list;
-      // await update_loop.updateOne({
-      //   $push: {
-      //     round_id_list: the_round_id_list[the_round_id_list.length - 1] + 1,
-      //   },
-      // });
-      // await update_loop.updateOne({ $unset: { "round_id_list.0": 1 } });
-      // await update_loop.updateOne({ $pull: { round_id_list: null } });
     }
 
     if (time_elapsed > 3) {
@@ -783,8 +828,6 @@ const loopUpdate = async () => {
       io.emit("testingvariable");
       let theLoop = await Game_loop.findById(GAME_LOOP_ID);
       io.emit("crash_history", theLoop.previous_crashes);
-      //       io.emit("get_round_id_list", theLoop.round_id_list);
-      // console.log(theLoop);
       live_bettors_table = [];
       phase_start_time = Date.now();
     }
