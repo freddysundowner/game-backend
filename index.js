@@ -399,7 +399,6 @@ app.post('/sendotp', async (req, res) => {
   let user = await User.findOne({ 'phonenumber': phonenumberwithoutplus })
   if (user) {
     let response = await functions.sendSms(phonenumber);
-    console.log(response);
     if (response.status === 200) {
 
       const otpExpiry = Date.now() + 5 * 60 * 1000; // OTP expiry set to 5 minutes from now
@@ -573,7 +572,7 @@ app.post("/depositaccount", checkAuthenticated, async (req, res) => {
   var data = {
     amount: req.body.amount,
     total_amount: req.body.amount,
-    phone: "254" + req.user.phonenumber.slice(1),
+    phone: req.user.phonenumber,
     id: req.user._id,
     socketid: req.body.socketid,
     call_back: process.env.MPESA_DEPOSIT_CALLBACK,
