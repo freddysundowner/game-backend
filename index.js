@@ -274,12 +274,8 @@ io.on("connection", async (socket) => {
           bettorObject.b_bet_live = false;
           bettorObject.userdata.balance +=
             bettorObject.userdata.bet_amount * current_multiplier;
-          console.log({
-            amount: bettorObject.amount * current_multiplier,
-            user: bettorObject.userdata,
-          });
           socket.emit("manual_cashout_early", {
-            amount: bettorObject.bet_amount * current_multiplier,
+            amount: bettorObject.bet_amount * current_multiplier - bettorObject.bet_amount,
             user: bettorObject.userdata,
           });
           io.emit(
@@ -293,7 +289,7 @@ io.on("connection", async (socket) => {
           await theLoop.updateOne({
             $pull: { active_player_id_list: userid },
           });
-
+ 
           console.log(bettorObject);
           await Bet.findByIdAndUpdate(bettorObject.betId, {
             cashout_multiplier: bettorObject.cashout_multiplier,
@@ -415,7 +411,6 @@ app.post('/sendotp', async (req, res) => {
         message: "Error sending otp code to " + phonenumberwithoutplus
       });
     }
-    console.log(response);
   } else {
     res.json({
       status: 400,
@@ -679,11 +674,11 @@ app.post("/verify_code", async (req, res) => {
 app.post("/withdraw", checkAuthenticated, async (req, res) => {
   let amount = req.body.amount;
   if (amount > req.user.balance) {
-    res.json({ status: 400, message: "you cannot withdraw more than " + req.user.balance })
+    res.json({ status: 400, message: "you cannot withdraw more than KES " + req.user.balance.toFixed(2) })
   } else {
     Axios({
       method: "POST",
-      data: { amount, phone: "254" + req.user.phonenumber.slice(1) },
+      data: { amount, phone: req.user.phonenumber },
       withCredentials: true,
       url: process.env.MPESA_WITHDRAW_URL,
     }).then(async (ress) => {
