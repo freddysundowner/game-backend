@@ -21,6 +21,7 @@ const User = require("./models/user");
 const Game_loop = require("./models/game");
 const Axios = require("axios");
 const functions = require("./shared/functions");
+app.use(require("./routes/ROUTE_MOUNTER"));
 require("dotenv").config();
 var ObjectId = require("mongodb").ObjectId;
 // Connect to MongoDB
@@ -669,7 +670,7 @@ app.post("/verify_code", async (req, res) => {
       message: "success fully deposited",
       user: currUser,
     });
-  }
+  } 
 });
 app.post("/withdraw", checkAuthenticated, async (req, res) => {
   let amount = req.body.amount;

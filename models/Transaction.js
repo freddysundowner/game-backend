@@ -14,6 +14,10 @@ const Transaction = new mongoose.Schema({
     amount: {
         type: Number,
         default: 0
+    },
+    type: {
+        type: String,
+        default: ''
     }
 },
     { timestamps: true, autoCreate: true, autoIndex: true });
