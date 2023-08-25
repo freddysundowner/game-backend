@@ -10,6 +10,7 @@ const bodyParser = require("body-parser");
 const MongoDBStore = require('connect-mongodb-session')(session);
 
 const Bet = require("./models/bet");
+const GameStats = require("./models/gamestats");
 const Transaction = require("./models/Transaction");
 
 require("dotenv").config();
@@ -132,7 +133,6 @@ io.on("connection", async (socket) => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   // console.log(theLoop);
   socket.on("bet", async (data) => {
-    console.log("bet data", data);
     var bet_amount = data.bet_amount;
     var payout_multiplier = data.payout_multiplier;
     var userid = data.userid;
@@ -265,9 +265,15 @@ io.on("connection", async (socket) => {
     }
     let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
+    // let totaltaken = 0;
+    // let taken;
     if (current_multiplier <= game_crash_value) {
       for (const bettorObject of live_bettors_table) {
         if (bettorObject.the_user_id === userid) {
+          // taken = bettorObject.bet_amount * current_multiplier;
+          // totaltaken = bettorObject.bet_amount * current_multiplier -
+          //   bettorObject.bet_amount;
+          
           bettorObject.cashout_multiplier = current_multiplier;
           bettorObject.profit =
             bettorObject.bet_amount * current_multiplier -
@@ -290,7 +296,7 @@ io.on("connection", async (socket) => {
           await theLoop.updateOne({
             $pull: { active_player_id_list: userid },
           });
- 
+
           console.log(bettorObject);
           await Bet.findByIdAndUpdate(bettorObject.betId, {
             cashout_multiplier: bettorObject.cashout_multiplier,
@@ -300,10 +306,19 @@ io.on("connection", async (socket) => {
           break;
         }
       }
-
-      //res.json(currUser);
     } else {
     }
+
+
+    // if (live_bettors_table.length > 0) {
+    //   await GameStats.create({
+    //     mined: totalBetMined,
+    //     totalusers: playerIdList.length,
+    //     taken: totalTaken,
+    //     crashPoint: crash_number,
+    //     totaltaken
+    //   })
+    // }
   });
 });
 
@@ -670,7 +685,7 @@ app.post("/verify_code", async (req, res) => {
       message: "success fully deposited",
       user: currUser,
     });
-  } 
+  }
 });
 app.post("/withdraw", checkAuthenticated, async (req, res) => {
   let amount = req.body.amount;
@@ -749,12 +764,25 @@ const cashout = async () => {
   theLoop = await Game_loop.findById(GAME_LOOP_ID);
   playerIdList = theLoop.active_player_id_list;
   crash_number = game_crash_value;
+  let totalBetMined = 0;
+  let totalTaken = 0;
   for (const playerId of playerIdList) {
     const currUser = await User.findById(playerId);
-    if (currUser.payout_multiplier <= crash_number) {
+    if (currUser.payout_multiplier > 0 && currUser.payout_multiplier <= crash_number) {
       currUser.balance += currUser.bet_amount * currUser.payout_multiplier;
+      totalTaken += currUser.bet_amount;
       await currUser.save();
+    } else {
+      totalBetMined += currUser.bet_amount;
     }
+  }
+  if (playerIdList.length > 0) {
+    await GameStats.create({
+      mined: totalBetMined,
+      totalusers: playerIdList.length,
+      taken: totalTaken,
+      crashPoint: crash_number
+    })
   }
   theLoop.active_player_id_list = [];
   live_bettors_table = [];
