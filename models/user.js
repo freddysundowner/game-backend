@@ -48,5 +48,14 @@ const user = new mongoose.Schema({
     autoIndex: true, // auto create indexes
   });
 
+user.methods.toJSON = function () {
+  const userObject = this.toObject();
+  delete userObject.password;
+  delete userObject.updatedAt;
+  delete userObject.__v;
+  // Delete any other sensitive fields you want to exclude
+  return userObject;
+};
+
 module.exports = mongoose.model("User", user);
  

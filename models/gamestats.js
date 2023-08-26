@@ -2,11 +2,7 @@ const mongoose = require("mongoose");
 const gamestats = new mongoose.Schema({
     mined: {
         type: Number,
-        required: 0
-    },
-    gameId: {
-        type: String,
-        default: null
+        default: 0
     },
     totalusers: {
         type: Number,
@@ -14,13 +10,16 @@ const gamestats = new mongoose.Schema({
     },
     taken: {
         type: Number,
-        required: true
     },
     crashPoint: {
         type: Number,
         default: 0
     },
-
+    totalWins: {
+        type: Number,
+        default: 0
+    },
+    
 
 },
     {
