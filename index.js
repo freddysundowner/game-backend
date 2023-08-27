@@ -7,7 +7,7 @@ const session = require("express-session");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const bodyParser = require("body-parser");
-const MongoDBStore = require('connect-mongodb-session')(session);
+const MongoDBStore = require("connect-mongodb-session")(session);
 const Axios = require("axios");
 
 const app = express();
@@ -16,21 +16,23 @@ const server = http.createServer(app);
 const functions = require("./shared/functions");
 require("dotenv").config();
 
-
 // Connect to MongoDB
 const connect = function () {
-  mongoose.connect(process.env.MONGOOSE_DB_LINK, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    useFindAndModify: false,
-  }, (err) => {
-    if (err) {
-      setTimeout(connect, 5000);
+  mongoose.connect(
+    process.env.MONGOOSE_DB_LINK,
+    {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      useFindAndModify: false,
+    },
+    (err) => {
+      if (err) {
+        setTimeout(connect, 5000);
+      }
     }
-  });
-}
+  );
+};
 connect();
-
 
 const Bet = require("./models/bet");
 const GameStats = require("./models/gamestats");
@@ -38,7 +40,7 @@ const Transaction = require("./models/Transaction");
 const User = require("./models/user");
 const Game = require("./models/game");
 
-let gameId = 0;
+let gameId;
 let live_bettors_table = [];
 let betting_phase = false;
 let game_phase = false;
@@ -64,7 +66,6 @@ server.listen(process.env.PORT, function (err) {
   }
   console.log("server listening on: ", ":", process.env.PORT);
 });
-
 
 app.use(require("./routes/ROUTE_MOUNTER"));
 app.use(bodyParser.json());
@@ -126,7 +127,6 @@ io.on("connection", async (socket) => {
     io.emit("newconection", connections);
   });
   theLoop = await Game.findById(GAME_LOOP_ID);
-  // console.log(theLoop);
   socket.on("bet", async (data) => {
     var bet_amount = data.bet_amount;
     var payout_multiplier = data.payout_multiplier;
@@ -163,10 +163,8 @@ io.on("connection", async (socket) => {
       });
       return;
     }
-    console.log(thisUser.balance);
     thisUser.balance = thisUser.balance - bet_amount;
     const betId = new ObjectId();
-    console.log(thisUser.balance);
     thisUser.bet_amount = bet_amount;
     thisUser.payout_multiplier = payout_multiplier;
     info_json = {
@@ -193,7 +191,6 @@ io.on("connection", async (socket) => {
       bet_amount: bet_amount,
       payout_multiplier: payout_multiplier,
     });
-    console.log(thisUser.balance);
     await User.findByIdAndUpdate(userid, {
       balance: thisUser.balance,
     });
@@ -208,19 +205,7 @@ io.on("connection", async (socket) => {
       _id: betId,
     });
     await bet.save();
-
-
-    //create game if it does not exists
-    if (gameId == null) {
-      let game = await GameStats.create({
-        totalusers: 1
-      });
-      console.log("created game stats", game);
-      gameId = game._id;
-      console.log("created game stats", gameId);
-    }
-  });
-
+  });  
 
   socket.on("receive_my_bets_table", async (data) => {
     let bets = await Bet.find({ user: data.id }).sort({ createdAt: -1 });
@@ -228,7 +213,6 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("auto_cashout_early", async (data) => {
-    console.log("auto_cashout_early", data);
     var userid = data.userid;
     var payout_multiplier = data.payout_multiplier;
     if (!game_phase) {
@@ -239,11 +223,13 @@ io.on("connection", async (socket) => {
 
   const cashOutNow = async (userid, type = "", payout_multiplier) => {
     let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
-    let current_multiplier = type == "auto" ? payout_multiplier : (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
+    let current_multiplier =
+      type == "auto"
+        ? payout_multiplier
+        : (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
     if (current_multiplier <= game_crash_value) {
       for (const bettorObject of live_bettors_table) {
         if (bettorObject.the_user_id === userid) {
-
           bettorObject.cashout_multiplier = current_multiplier;
           bettorObject.profit =
             bettorObject.bet_amount * current_multiplier -
@@ -252,7 +238,9 @@ io.on("connection", async (socket) => {
           bettorObject.userdata.balance +=
             bettorObject.userdata.bet_amount * current_multiplier;
           let sendData = {
-            amount: bettorObject.bet_amount * current_multiplier - bettorObject.bet_amount,
+            amount:
+              bettorObject.bet_amount * current_multiplier -
+              bettorObject.bet_amount,
             user: bettorObject.userdata,
           };
           if (type == "manual") {
@@ -277,41 +265,51 @@ io.on("connection", async (socket) => {
           });
 
           let taken = (bettorObject.bet_amount * current_multiplier).toFixed(2);
-          let totalWins = ((bettorObject.bet_amount * current_multiplier) - bettorObject.bet_amount).toFixed(2);
-          createGameStats(taken, totalWins, 0);
+          let totalWins = (
+            bettorObject.bet_amount * current_multiplier -
+            bettorObject.bet_amount
+          ).toFixed(2);
+          createGameStats(taken, totalWins, 0, 1);
           break;
         }
       }
     }
-  }
+  };
   socket.on("manual_cashout_early", async (data) => {
     var userid = data.userid;
     if (!game_phase) {
       return;
     }
     cashOutNow(userid, "manual");
-
   });
 });
 
-const createGameStats = async (taken = 0, totalWins = 0, mined = 0) => {
+const createGameStats = async (
+  taken = 0,
+  totalWins = 0,
+  mined = 0,
+  totalusers = 0
+) => {
   let gamestats = await GameStats.findOneAndUpdate(
     { _id: gameId },
     {
       $inc: {
-        taken, totalWins, mined
-      }
+        taken,
+        totalWins,
+        mined,
+        totalusers,
+      },
     },
     {
       upsert: true,
-      returnOriginal: false
-    });
+      returnOriginal: false,
+    }
+  );
 
-  console.log("updated gme stats", gamestats);
-}
+};
 
 app.post("/login", (req, res, next) => {
-  let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber)
+  let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber);
   if (phonewithplus === null) {
     res.json({ status: 400, message: "Phone number is invalid" });
     return;
@@ -322,23 +320,26 @@ app.post("/login", (req, res, next) => {
     if (!user) {
       res.json({ status: 400, message: "Username or Password is Wrong" });
     } else {
-      let existingSessions = await mongoose.connection.db.collection('sessions').find({
-        'session.passport.user': user._id.toString(),
-        _id: {
-          $ne: req.session._id
-        }
-      }).toArray();
+      let existingSessions = await mongoose.connection.db
+        .collection("sessions")
+        .find({
+          "session.passport.user": user._id.toString(),
+          _id: {
+            $ne: req.session._id,
+          },
+        })
+        .toArray();
 
       if (existingSessions.length) {
-        await mongoose.connection.db.collection('sessions').deleteMany({
+        await mongoose.connection.db.collection("sessions").deleteMany({
           _id: {
-            $in: existingSessions.map(({ _id }) => _id)
-          }
+            $in: existingSessions.map(({ _id }) => _id),
+          },
         });
       }
       req.logIn(user, async (err) => {
         if (err) throw err;
-        io.to(user.socketid).emit('update_user');
+        io.to(user.socketid).emit("update_user");
 
         await User.findByIdAndUpdate(user._id, {
           socketid: req.body.socketid,
@@ -367,12 +368,14 @@ app.post("/changepassword", checkAuthenticated, async (req, res) => {
 
   //Check password length
   if (newPassword.length < 6 || confirmNewPassword.length < 6) {
-    res.json({ msg: "Password should be at least six characters.", status: false });
+    res.json({
+      msg: "Password should be at least six characters.",
+      status: false,
+    });
     return;
   }
 
   User.findOne({ _id: req.user._id }).then(async (user) => {
-    console.log(user.password);
     //Update password for user with new password
     bcrypt.genSalt(10, (err, salt) =>
       bcrypt.hash(newPassword, salt, (err, hash) => {
@@ -383,76 +386,80 @@ app.post("/changepassword", checkAuthenticated, async (req, res) => {
     );
     res.json({ msg: "Password changed successfully", status: true });
   });
-
 });
 
-app.post('/sendotp', async (req, res) => {
+app.post("/sendotp", async (req, res) => {
   let phonenumber = functions.validateKenyanPhoneNumber(req.body.phonenumber);
   let phonenumberwithoutplus = functions.getPhoneNumberWithoutPlus(phonenumber);
   if (phonenumber === null) {
     res.json({
       status: 400,
-      "message": "invalid phone number"
+      message: "invalid phone number",
     });
     return;
   }
-  let user = await User.findOne({ 'phonenumber': phonenumberwithoutplus })
+  let user = await User.findOne({ phonenumber: phonenumberwithoutplus });
   if (user) {
     let response = await functions.sendSms(phonenumber);
     if (response.status === 200) {
-
       const otpExpiry = Date.now() + 5 * 60 * 1000; // OTP expiry set to 5 minutes from now
 
       req.session.otp = { code: response.code, expiry: otpExpiry };
       req.session.phonenumber = phonenumber;
       res.json({
         status: response.status,
-        message: "Enter OTP code send to " + phonenumberwithoutplus
+        message: "Enter OTP code send to " + phonenumberwithoutplus,
       });
     } else {
       res.json({
         status: response.status,
-        message: "Error sending otp code to " + phonenumberwithoutplus
+        message: "Error sending otp code to " + phonenumberwithoutplus,
       });
     }
   } else {
     res.json({
       status: 400,
-      "message": "You do not have an account with this number " + phonenumberwithoutplus
+      message:
+        "You do not have an account with this number " + phonenumberwithoutplus,
     });
   }
-})
-app.post('/resetpassword', async (req, res) => {
+});
+app.post("/resetpassword", async (req, res) => {
   const password = req.body.password;
   const confirmpassword = req.body.confirmpassword;
   if (password !== confirmpassword) {
-    return res.json({ message: 'password must match', status: 400 });
+    return res.json({ message: "password must match", status: 400 });
   }
   if (password === confirmpassword) {
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log(req.session.phonenumber);
-    let user = await User.findOneAndUpdate({ phonenumber: functions.getPhoneNumberWithoutPlus(req.session.phonenumber) }, { $set: { password: hashedPassword } })
+    let user = await User.findOneAndUpdate(
+      {
+        phonenumber: functions.getPhoneNumberWithoutPlus(
+          req.session.phonenumber
+        ),
+      },
+      { $set: { password: hashedPassword } }
+    );
     if (user) {
-      return res.json({ message: 'passsord reset successfully', status: 200 });
+      return res.json({ message: "passsord reset successfully", status: 200 });
     } else {
-      return res.json({ message: 'passsord reset failed', status: 400 });
+      return res.json({ message: "passsord reset failed", status: 400 });
     }
-
   }
-})
-app.post('/verifyotp', async (req, res) => {
+});
+app.post("/verifyotp", async (req, res) => {
   const userOTP = req.body.otp;
   const sessionOTP = req.session.otp;
   if (!sessionOTP || sessionOTP.expiry < Date.now()) {
-    return res.json({ message: 'OTP expired or not generated', status: 400 });
+    return res.json({ message: "OTP expired or not generated", status: 400 });
   }
   if (parseInt(userOTP) === sessionOTP.code) {
     delete req.session.otp; // Remove OTP from session after successful verification
-    return res.json({ message: 'OTP verified successfully', status: 200 });
+    return res.json({ message: "OTP verified successfully", status: 200 });
   } else {
-    return res.json({ message: 'Incorrect OTP', status: 400 });
+    return res.json({ message: "Incorrect OTP", status: 400 });
   }
-})
+});
 app.post("/register", (req, res) => {
   if (req.body.password < 3) {
     res.json({
@@ -472,7 +479,7 @@ app.post("/register", (req, res) => {
     res.json({ status: 400, message: "Phone number is required" });
     return;
   }
-  let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber)
+  let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber);
   if (phonewithplus === null) {
     res.json({ status: 400, message: "Phone number is invalid" });
     return;
@@ -480,8 +487,6 @@ app.post("/register", (req, res) => {
   let phone = functions.getPhoneNumberWithoutPlus(phonewithplus);
   var username = req.body.username;
   var referal = req.body.referal;
-
-
 
   User.findOne({ phonenumber: phone }, async (err, doc) => {
     if (err) throw err;
@@ -492,7 +497,7 @@ app.post("/register", (req, res) => {
       const newUser = new User({
         username: username,
         password: hashedPassword,
-        phonenumber: phone
+        phonenumber: phone,
       });
       await newUser.save();
 
@@ -516,8 +521,12 @@ app.get("/user", checkAuthenticated, async (req, res) => {
 });
 
 app.post("/user/update", checkAuthenticated, async (req, res) => {
-  const response = await User.findOneAndUpdate({ _id: req.user._id }, req.body, { new: true });
-  res.send(response)
+  const response = await User.findOneAndUpdate(
+    { _id: req.user._id },
+    req.body,
+    { new: true }
+  );
+  res.send(response);
 });
 function checkAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
@@ -527,15 +536,10 @@ function checkAuthenticated(req, res, next) {
   return res.send("No User Authentication");
 }
 
-
-
 app.get("/logout", (req, res) => {
   req.logout();
   res.send("success2");
 });
-
-
-
 
 app.get("/retrieve_active_bettors_list", async (req, res) => {
   io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
@@ -554,7 +558,7 @@ app.post("/depositaccount", checkAuthenticated, async (req, res) => {
     method: "POST",
     data: data,
     withCredentials: true,
-    url: process.env.MPESA_DEPOSIT_URL
+    url: process.env.MPESA_DEPOSIT_URL,
   }).then(async (ress) => {
     const currUser = await User.findOne({ _id: req.user._id });
     currUser.socketid = req.user.socketid;
@@ -578,7 +582,6 @@ app.post("/verify_mpesa_code", checkAuthenticated, async (req, res) => {
     withCredentials: true,
     url: process.env.MPESA_QUERY,
   }).then(async (ress) => {
-    console.log(ress.data);
     return res.json(ress.data);
   });
 });
@@ -652,7 +655,11 @@ app.post("/verify_code", async (req, res) => {
 app.post("/withdraw", checkAuthenticated, async (req, res) => {
   let amount = req.body.amount;
   if (amount > req.user.balance) {
-    res.json({ status: 400, message: "you cannot withdraw more than KES " + req.user.balance.toFixed(2) })
+    res.json({
+      status: 400,
+      message:
+        "you cannot withdraw more than KES " + req.user.balance.toFixed(2),
+    });
   } else {
     Axios({
       method: "POST",
@@ -660,7 +667,6 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
       withCredentials: true,
       url: process.env.MPESA_WITHDRAW_URL,
     }).then(async (ress) => {
-      console.log(ress.data);
       if (ress.data.status == 200) {
         const currUser = await User.findOne({ _id: req.user._id });
         currUser.balance -= amount;
@@ -669,7 +675,7 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
       res.json(ress.data);
     });
   }
-})
+});
 app.post("/deposit", async (req, res) => {
   var transaction_code = req.body.transactionid;
   const transactions = await Transaction.find({
@@ -680,11 +686,14 @@ app.post("/deposit", async (req, res) => {
   } else {
     var amount = parseInt(req.body.amount);
     var bf = req.body.phone ? req.body.phone.slice(3) : req.body.phone;
-    var phone = req.body.phone ? req.body.phone.length == 10 ? req.body.phone : "0" + bf : "";
+    var phone = req.body.phone
+      ? req.body.phone.length == 10
+        ? req.body.phone
+        : "0" + bf
+      : "";
     const currUser = await User.findOne({ phonenumber: phone });
 
     if (!currUser) {
-      console.log("failed")
       return;
     }
     var socketid = currUser.socketid;
@@ -715,36 +724,45 @@ app.get("/transactions", async (req, res, next) => {
 });
 app.get("/creategame", async (req, res) => {
   await Game().save(function (err, p, pp) {
-    console.log(err, p, pp);
-    console.log(p);
     return res.json(p);
   });
 });
 
-
 const cashout = async () => {
-  console.log("live_bettors_table", live_bettors_table);
   theLoop = await Game.findById(GAME_LOOP_ID);
   playerIdList = theLoop.active_player_id_list;
   crash_number = game_crash_value;
   let totalBetMined = 0;
   let taken = 0;
   let totalWins = 0;
-  let betId = 0;
   for (const bettorObject of live_bettors_table) {
     const currUser = await User.findById(bettorObject.the_user_id);
-    if (currUser.payout_multiplier > 0 && currUser.payout_multiplier <= crash_number) {
+    if (
+      currUser.payout_multiplier > 0 &&
+      currUser.payout_multiplier <= crash_number
+    ) {
       currUser.balance += currUser.bet_amount * currUser.payout_multiplier;
       taken += currUser.bet_amount * currUser.payout_multiplier;
-      totalWins += (currUser.bet_amount * currUser.payout_multiplier) - currUser.bet_amount
+      totalWins +=
+        currUser.bet_amount * currUser.payout_multiplier - currUser.bet_amount;
       await currUser.save();
     } else {
       totalBetMined += currUser.bet_amount;
     }
-    betId = bettorObject.betId;
   }
   if (playerIdList.length > 0) {
-    createGameStats(taken, totalWins, totalBetMined);
+    createGameStats(taken, totalWins, totalBetMined, playerIdList.length);
+  }
+  if (playerIdList.length == 0) {
+    await GameStats.findByIdAndDelete(gameId);
+  }
+  gameId = null;
+  //create game if it does not exists
+  if (gameId == null) {
+    let game = await GameStats.create({
+      totalusers: 0,
+    });
+    gameId = game._id;
   }
   theLoop.active_player_id_list = [];
   live_bettors_table = [];
@@ -777,7 +795,6 @@ const loopUpdate = async () => {
       phase_start_time = Date.now();
     }
   } else if (cashout_phase) {
-    gameId = null;
     if (!sent_cashout) {
       cashout();
       sent_cashout = true;
