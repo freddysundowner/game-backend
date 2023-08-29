@@ -130,6 +130,7 @@ io.on("connection", async (socket) => {
   socket.on("bet", async (data) => {
     var bet_amount = data.bet_amount;
     var payout_multiplier = data.payout_multiplier;
+    gameId = data.gameId;
     var userid = data.userid;
     if (!betting_phase) {
       console.log({ customError: "IT IS NOT THE BETTING PHASE" });
@@ -730,7 +731,6 @@ const cashout = async () => {
   let totalBetMined = 0;
   let taken = 0;
   let totalWins = 0;
-  let betId = 0;
   for (const bettorObject of live_bettors_table) {
     const currUser = await User.findById(bettorObject.the_user_id);
     if (currUser.payout_multiplier > 0 && currUser.payout_multiplier <= crash_number) {
@@ -753,7 +753,7 @@ const cashout = async () => {
 
 // Run Game Loop
 let phase_start_time = Date.now();
-const pat = setInterval(async () => {
+setInterval(async () => {
   await loopUpdate();
 }, 1000);
 
@@ -765,7 +765,7 @@ const loopUpdate = async () => {
       sent_cashout = false;
       betting_phase = false;
       game_phase = true;
-      io.emit("start_multiplier_count");
+      io.emit("start_multiplier_count",gameId);
       phase_start_time = Date.now();
     }
   } else if (game_phase) {
@@ -799,17 +799,27 @@ const loopUpdate = async () => {
       cashout_phase = false;
       betting_phase = true;
 
-      let randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
-      if (randomInt % 33 == 0) {
-        game_crash_value = 1;
-      } else {
-        random_int_0_to_1 = Math.random();
-        while (random_int_0_to_1 == 0) {
-          random_int_0_to_1 = Math.random;
-        }
-        game_crash_value = 0.01 + 0.99 / random_int_0_to_1;
-        game_crash_value = Math.round(game_crash_value * 100) / 100;
-      }
+      const availableResources = 50000;
+      const total = live_bettors_table.reduce((acc, obj) => acc + obj.bet_amount, 0);
+
+      const totalBets = live_bettors_table.length * total;
+
+      const maxAllowedCrashValue = availableResources / totalBets;
+
+      // Generate a game crash value that doesn't exceed the maximum allowed
+      game_crash_value = generateCrashValue(maxAllowedCrashValue);
+
+      // let randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
+      // if (randomInt % 33 == 0) {
+      //   game_crash_value = 1;
+      // } else {
+      //   random_int_0_to_1 = Math.random();
+      //   while (random_int_0_to_1 == 0) {
+      //     random_int_0_to_1 = Math.random();
+      //   }
+      //   game_crash_value = 0.01 + 0.99 / random_int_0_to_1;
+      //   game_crash_value = Math.round(game_crash_value * 100) / 100;
+      // }
       io.emit("update_user");
       io.emit("start_betting_phase");
       io.emit("testingvariable");
@@ -820,3 +830,13 @@ const loopUpdate = async () => {
     }
   }
 };
+function generateCrashValue(maxAllowedCrashValue) {
+  const randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
+  if (randomInt % 33 === 0) {
+    return 1;
+  } else {
+    const random_int_0_to_1 = Math.random();
+    const adjustedCrashValue = Math.min(maxAllowedCrashValue, 0.01 + 0.99 / random_int_0_to_1);
+    return Math.round(adjustedCrashValue * 100) / 100;
+  }
+}
