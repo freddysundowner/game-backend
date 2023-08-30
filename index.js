@@ -50,6 +50,10 @@ let game_crash_value = -69;
 let sent_cashout = true;
 let connections = [];
 
+let availableResources = 0;
+let safetyMargin = 0;
+let betLimit = 0;
+
 var ObjectId = require("mongodb").ObjectId;
 const GAME_LOOP_ID = process.env.GAME_LOOP_ID;
 
@@ -207,7 +211,7 @@ io.on("connection", async (socket) => {
       _id: betId,
     });
     await bet.save();
-  });  
+  });
 
   socket.on("receive_my_bets_table", async (data) => {
     let bets = await Bet.find({ user: data.id }).sort({ createdAt: -1 });
@@ -307,23 +311,25 @@ const createGameStats = async (
       returnOriginal: false,
     }
   );
-
+  console.log("mined", mined);
   if (mined > 0) {
+    // let id = await Settings.create({});
     await Settings.findOneAndUpdate(
-      { _id: null },
+      { _id: process.env.SETTINGS_ID },
       {
         $inc: {
-          totalamount
-        }
+          totalMined: mined,
+        },
       },
       {
         upsert: true,
-        returnOriginal: false
-      });
+        returnOriginal: false,
+      }
+    );
   }
 
   console.log("updated gme stats", gamestats);
-}
+};
 
 app.post("/login", (req, res, next) => {
   let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber);
@@ -692,7 +698,6 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
   }
 });
 app.post("/deposit", async (req, res) => {
-  console.log(req.body)
   var transaction_code = req.body.transactionid;
   const transactions = await Transaction.find({
     transaction_code: transaction_code,
@@ -722,21 +727,11 @@ app.post("/deposit", async (req, res) => {
   }
 });
 
-app.get("/retrieve_bet_history", async (req, res) => {
-  let theLoop = await Game.findById(GAME_LOOP_ID);
-  // io.emit("crash_history", theLoop.previous_crashes);
-  return res.send(theLoop.previous_crashes);
-});
 app.get("/transactions", async (req, res, next) => {
   var transactions = await Transaction.find({ user: req.user._id }).sort({
     createdAt: -1,
   });
   res.json(transactions);
-});
-app.get("/creategame", async (req, res) => {
-  await Game().save(function (err, p, pp) {
-    return res.json(p);
-  });
 });
 
 const cashout = async () => {
@@ -797,9 +792,8 @@ const loopUpdate = async () => {
       if (live_bettors_table.length > 0) {
         game_crash_value = generateCrashValue(live_bettors_table);
       }
-      console.log("new game_crash_value", game_crash_value);
       io.emit("start_multiplier_count", gameId);
-      phase_start_time = Date.now();
+      phase_start_time = Date.now(); 
     }
   } else if (game_phase) {
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
@@ -831,6 +825,14 @@ const loopUpdate = async () => {
       cashout_phase = false;
       betting_phase = true;
 
+      //set game params;
+      let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
+      if (gameSettings) {
+        availableResources = gameSettings.float;
+        safetyMargin = gameSettings.safetyMargin;
+        betLimit = gameSettings.betlimit;
+      }
+
       let randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
       if (randomInt % 33 == 0) {
         game_crash_value = 1;
@@ -842,8 +844,6 @@ const loopUpdate = async () => {
         game_crash_value = 0.01 + 0.99 / random_int_0_to_1;
         game_crash_value = Math.round(game_crash_value * 100) / 100;
       }
-
-      console.log("game_crash_value", game_crash_value);
 
       io.emit("update_user");
       io.emit("start_betting_phase");
@@ -857,38 +857,23 @@ const loopUpdate = async () => {
 };
 
 function generateCrashValue(live_bettors_table) {
-  const total = live_bettors_table.reduce((acc, obj) => acc + obj.bet_amount, 0);
+  const total = live_bettors_table.reduce(
+    (acc, obj) => acc + obj.bet_amount,
+    0
+  );
 
   const randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
   if (randomInt % 33 === 0) {
     return 1;
   } else {
     const totalBets = live_bettors_table.length * total;
-    const availableResources = 50000;
-    const safetyMargin = 10000; // Example safety margin
-    const maxAllowedCrashValue = (availableResources - safetyMargin) / totalBets;
+    const maxAllowedCrashValue =
+      (availableResources - safetyMargin) / totalBets;
     const random_int_0_to_1 = Math.random();
-    const adjustedCrashValue = Math.min(maxAllowedCrashValue, 1.1 + 0.9 / random_int_0_to_1);
+    const adjustedCrashValue = Math.min(
+      maxAllowedCrashValue,
+      1.1 + 0.9 / random_int_0_to_1
+    );
     return Math.round(adjustedCrashValue * 100) / 100;
   }
 }
-// function generateCrashValue(live_bettors_table) {
-
-//   const availableResources = 50000;
-//   const total = live_bettors_table.reduce((acc, obj) => acc + obj.bet_amount, 0);
-
-//   const randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
-//   if (randomInt % 33 === 0) {
-//     return 1;
-//   } else {
-//     console.log("live_bettors_table", live_bettors_table.length);
-//     const totalBets = live_bettors_table.length * total;
-//     console.log("total", total);
-//     console.log("totalBets", totalBets);
-//     const maxAllowedCrashValue = availableResources / totalBets;
-//     console.log("maxAllowedCrashValue", maxAllowedCrashValue);
-//     const random_int_0_to_1 = Math.random();
-//     const adjustedCrashValue = Math.min(maxAllowedCrashValue, 0.01 + 0.99 / random_int_0_to_1);
-//     return Math.round(adjustedCrashValue * 100) / 100;
-//   }
-// }
