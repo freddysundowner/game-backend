@@ -39,6 +39,7 @@ const GameStats = require("./models/gamestats");
 const Transaction = require("./models/Transaction");
 const User = require("./models/user");
 const Game = require("./models/game");
+const Settings = require("./models/settings");
 
 let gameId;
 let live_bettors_table = [];
@@ -130,6 +131,7 @@ io.on("connection", async (socket) => {
   socket.on("bet", async (data) => {
     var bet_amount = data.bet_amount;
     var payout_multiplier = data.payout_multiplier;
+    gameId = data.gameId;
     var userid = data.userid;
     if (!betting_phase) {
       console.log({ customError: "IT IS NOT THE BETTING PHASE" });
@@ -306,7 +308,22 @@ const createGameStats = async (
     }
   );
 
-};
+  if (mined > 0) {
+    await Settings.findOneAndUpdate(
+      { _id: null },
+      {
+        $inc: {
+          totalamount
+        }
+      },
+      {
+        upsert: true,
+        returnOriginal: false
+      });
+  }
+
+  console.log("updated gme stats", gamestats);
+}
 
 app.post("/login", (req, res, next) => {
   let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber);
@@ -561,7 +578,7 @@ app.post("/depositaccount", checkAuthenticated, async (req, res) => {
     url: process.env.MPESA_DEPOSIT_URL,
   }).then(async (ress) => {
     const currUser = await User.findOne({ _id: req.user._id });
-    currUser.socketid = req.user.socketid;
+    currUser.socketid = req.body.socketid;
     currUser.save();
     res.json(ress.data);
     if (ress.data !== 200) {
@@ -627,8 +644,6 @@ app.post("/verify_code", async (req, res) => {
     });
     res.json({ status: 500, message: "dublicate" });
   } else {
-    var bf = phone.slice(3);
-    var phone = phone.length == 10 ? phone : "0" + bf;
     const currUser = await User.findOne({ phonenumber: phone });
     currUser.balance += amount;
     currUser.save();
@@ -677,6 +692,7 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
   }
 });
 app.post("/deposit", async (req, res) => {
+  console.log(req.body)
   var transaction_code = req.body.transactionid;
   const transactions = await Transaction.find({
     transaction_code: transaction_code,
@@ -685,12 +701,7 @@ app.post("/deposit", async (req, res) => {
     res.json({ status: 500, message: "dublicate" });
   } else {
     var amount = parseInt(req.body.amount);
-    var bf = req.body.phone ? req.body.phone.slice(3) : req.body.phone;
-    var phone = req.body.phone
-      ? req.body.phone.length == 10
-        ? req.body.phone
-        : "0" + bf
-      : "";
+    var phone = req.body.phone;
     const currUser = await User.findOne({ phonenumber: phone });
 
     if (!currUser) {
@@ -771,7 +782,7 @@ const cashout = async () => {
 
 // Run Game Loop
 let phase_start_time = Date.now();
-const pat = setInterval(async () => {
+setInterval(async () => {
   await loopUpdate();
 }, 1000);
 
@@ -783,7 +794,11 @@ const loopUpdate = async () => {
       sent_cashout = false;
       betting_phase = false;
       game_phase = true;
-      io.emit("start_multiplier_count");
+      if (live_bettors_table.length > 0) {
+        game_crash_value = generateCrashValue(live_bettors_table);
+      }
+      console.log("new game_crash_value", game_crash_value);
+      io.emit("start_multiplier_count", gameId);
       phase_start_time = Date.now();
     }
   } else if (game_phase) {
@@ -822,11 +837,14 @@ const loopUpdate = async () => {
       } else {
         random_int_0_to_1 = Math.random();
         while (random_int_0_to_1 == 0) {
-          random_int_0_to_1 = Math.random;
+          random_int_0_to_1 = Math.random();
         }
         game_crash_value = 0.01 + 0.99 / random_int_0_to_1;
         game_crash_value = Math.round(game_crash_value * 100) / 100;
       }
+
+      console.log("game_crash_value", game_crash_value);
+
       io.emit("update_user");
       io.emit("start_betting_phase");
       io.emit("testingvariable");
@@ -837,3 +855,40 @@ const loopUpdate = async () => {
     }
   }
 };
+
+function generateCrashValue(live_bettors_table) {
+  const total = live_bettors_table.reduce((acc, obj) => acc + obj.bet_amount, 0);
+
+  const randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
+  if (randomInt % 33 === 0) {
+    return 1;
+  } else {
+    const totalBets = live_bettors_table.length * total;
+    const availableResources = 50000;
+    const safetyMargin = 10000; // Example safety margin
+    const maxAllowedCrashValue = (availableResources - safetyMargin) / totalBets;
+    const random_int_0_to_1 = Math.random();
+    const adjustedCrashValue = Math.min(maxAllowedCrashValue, 1.1 + 0.9 / random_int_0_to_1);
+    return Math.round(adjustedCrashValue * 100) / 100;
+  }
+}
+// function generateCrashValue(live_bettors_table) {
+
+//   const availableResources = 50000;
+//   const total = live_bettors_table.reduce((acc, obj) => acc + obj.bet_amount, 0);
+
+//   const randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
+//   if (randomInt % 33 === 0) {
+//     return 1;
+//   } else {
+//     console.log("live_bettors_table", live_bettors_table.length);
+//     const totalBets = live_bettors_table.length * total;
+//     console.log("total", total);
+//     console.log("totalBets", totalBets);
+//     const maxAllowedCrashValue = availableResources / totalBets;
+//     console.log("maxAllowedCrashValue", maxAllowedCrashValue);
+//     const random_int_0_to_1 = Math.random();
+//     const adjustedCrashValue = Math.min(maxAllowedCrashValue, 0.01 + 0.99 / random_int_0_to_1);
+//     return Math.round(adjustedCrashValue * 100) / 100;
+//   }
+// }
