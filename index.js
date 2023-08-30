@@ -72,9 +72,9 @@ server.listen(process.env.PORT, function (err) {
   console.log("server listening on: ", ":", process.env.PORT);
 });
 
-app.use(require("./routes/ROUTE_MOUNTER"));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(require("./routes/ROUTE_MOUNTER"));
 app.use(
   cors({
     origin: true,
@@ -102,6 +102,9 @@ require("./passportConfig")(passport);
 app.get("/", async (req, res) => {
   res.send({ default: "none" });
 });
+// const socketModule = require("./socketModule"); // Path to your socketModule.js file
+
+// socketModule(io, Game, Bet, User);
 
 io.on("connection", async (socket) => {
   connections.push(socket.id);
@@ -311,14 +314,14 @@ const createGameStats = async (
       returnOriginal: false,
     }
   );
-  console.log("mined", mined);
-  if (mined > 0) {
+  if (mined > 0 || taken > 0) {
     // let id = await Settings.create({});
     await Settings.findOneAndUpdate(
       { _id: process.env.SETTINGS_ID },
       {
         $inc: {
-          totalMined: mined,
+          totalamount: mined,
+          float: -taken,
         },
       },
       {
@@ -327,8 +330,6 @@ const createGameStats = async (
       }
     );
   }
-
-  console.log("updated gme stats", gamestats);
 };
 
 app.post("/login", (req, res, next) => {
@@ -793,7 +794,7 @@ const loopUpdate = async () => {
         game_crash_value = generateCrashValue(live_bettors_table);
       }
       io.emit("start_multiplier_count", gameId);
-      phase_start_time = Date.now(); 
+      phase_start_time = Date.now();
     }
   } else if (game_phase) {
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
