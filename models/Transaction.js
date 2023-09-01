@@ -21,7 +21,7 @@ const Transaction = new mongoose.Schema({
     },
     status: {
         type: Boolean,
-        default: false
+        default: false 
     },
     description: {
         type: String,

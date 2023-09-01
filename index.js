@@ -661,7 +661,7 @@ app.post("/verify_code", async (req, res) => {
       user: currUser._id,
       transaction_code: transcode,
       type: "deposit",
-      status:true
+      status: true,
     });
     await transaction.save();
 
@@ -676,18 +676,21 @@ app.post("/verify_code", async (req, res) => {
       user: currUser,
     });
   }
-}); 
+});
 
 app.post("/withdraw/response", async (req, res) => {
-	console.log(req.body);
-	 const transactionRes = await Transaction.findOne({ _id: req.body.transactionId});
-	console.log(transactionRes);
-     transactionRes.status = req.body.ResultCode ==0;
-     transactionRes.transaction_code = req.body.TransID;
-     transactionRes.description = req.body.ResultCode ==1 ? req.body.mpesamessage : '';
-     transactionRes.save();
-	console.log(transactionRes);
-})
+  console.log(req.body);
+  const transactionRes = await Transaction.findOne({
+    _id: req.body.transactionId,
+  });
+  console.log(transactionRes);
+  transactionRes.status = req.body.ResultCode == 0;
+  transactionRes.transaction_code = req.body.TransID;
+  transactionRes.description =
+    req.body.ResultCode == 1 ? req.body.mpesamessage : "";
+  transactionRes.save();
+  console.log(transactionRes);
+});
 
 app.post("/withdraw", checkAuthenticated, async (req, res) => {
   let amount = req.body.amount;
@@ -695,27 +698,30 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
     res.json({
       status: 400,
       message:
-        "you cannot withdraw more than KES " + req.user.balance.toFixed(2), 
-    }); 
+        "you cannot withdraw more than KES " + req.user.balance.toFixed(2),
+    });
   } else {
-	  console.log(req.user)
+    console.log(req.user);
     const transaction = new Transaction({
       amount: amount,
       user: req.user._id,
-      type: "withdraw", 
-      status:false 
+      type: "withdraw",
+      status: false,
     });
     transaction.save();
     console.log(transaction);
-    
+
     Axios({
       method: "POST",
-      data: { amount, phone: req.user.phonenumber,transactionId: transaction._id },
+      data: {
+        amount,
+        phone: req.user.phonenumber,
+        transactionId: transaction._id,
+      },
       withCredentials: true,
       url: process.env.MPESA_WITHDRAW_URL,
     }).then(async (ress) => {
       if (ress.data.status == 200) {
-	       
         const currUser = await User.findOne({ _id: req.user._id });
         currUser.balance -= amount;
         currUser.save();
@@ -748,6 +754,8 @@ app.post("/deposit", async (req, res) => {
       amount: amount,
       user: currUser._id,
       transaction_code: transaction_code,
+      type: "deposit",
+      status: true,
     });
     await transaction.save();
     res.json(currUser);

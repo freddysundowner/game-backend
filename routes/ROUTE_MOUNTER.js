@@ -5,5 +5,5 @@ const settings = require("./settings");
 
 module.exports = app = express();
 app.use("/users", user);
-app.use("/transactions", transations);
+app.use("/dashboardtransactions", transations);
 app.use("/settings", settings);
