@@ -424,7 +424,7 @@ app.post("/sendotp", async (req, res) => {
   }
   let user = await User.findOne({ phonenumber: phonenumberwithoutplus });
   if (user) {
-    let response = await functions.sendSms(phonenumber);
+    let response = await functions.sendSms(phonenumberwithoutplus);
     if (response.status === 200) {
       const otpExpiry = Date.now() + 5 * 60 * 1000; // OTP expiry set to 5 minutes from now
 

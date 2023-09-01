@@ -35,18 +35,12 @@ async function sendSms(phonenumber) {
     const apiKey = process.env.SMS_API_KEY;
     let code = getRandomInt(606851, 362468);
     const data = {
-        mobile: phonenumber,
-        response_type: 'json',
-        sender_name: process.env.SMS_SHORT_CODE,
-        service_id: 0,
-        message: `Your OTP code is ${code}`
+        phone: phonenumber,
+        sender_id: process.env.SMS_SHORT_CODE,
+        message: `Your OTP code is ${code}`,
+        'api_key': apiKey
     };
-
-    const headers = {
-        'h_api_key': apiKey,
-        'Content-Type': 'application/json'
-    };
-    let reponse = await axios.post(url, data, { headers });;
+    let reponse = await axios.post(url, data);
     if (reponse.data[0].status_desc === 'Success') {
         return {
             status: 200,
@@ -57,7 +51,7 @@ async function sendSms(phonenumber) {
             status: 400,
             code: null
         };
-    }
+    } 
 
 }
 
