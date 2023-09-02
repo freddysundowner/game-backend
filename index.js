@@ -9,7 +9,6 @@ const bcrypt = require("bcryptjs");
 const bodyParser = require("body-parser");
 const MongoDBStore = require("connect-mongodb-session")(session);
 const Axios = require("axios");
-
 const app = express();
 const server = http.createServer(app);
 
@@ -139,6 +138,8 @@ io.on("connection", async (socket) => {
   socket.on("bet", async (data) => {
     var bet_amount = data.bet_amount;
     var payout_multiplier = data.payout_multiplier;
+
+    console.log("data", data);
     gameId = data.gameId;
     var userid = data.userid;
     if (!betting_phase) {
@@ -173,6 +174,8 @@ io.on("connection", async (socket) => {
       });
       return;
     }
+
+    console.log("thisUser", thisUser);
     thisUser.balance = thisUser.balance - bet_amount;
     const betId = new ObjectId();
     thisUser.bet_amount = bet_amount;
@@ -189,6 +192,7 @@ io.on("connection", async (socket) => {
       balance: thisUser.balance,
       betId,
     };
+    console.log("info_json", info_json);
     live_bettors_table.push(info_json);
     io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
     socket.emit("success_betting", {
@@ -258,7 +262,12 @@ io.on("connection", async (socket) => {
           }
           if (type == "auto") {
             socket.emit("auto_cashout_early", sendData);
-          }
+          }  
+          // console.log("live_bettors_table", live_bettors_table.length);
+          // const index = live_bettors_table.indexOf(bettorObject);
+
+          // live_bettors_table.splice(index, 1);
+          // console.log("live_bettors_table", live_bettors_table.length);
           io.emit(
             "receive_live_betting_table",
             JSON.stringify(live_bettors_table)
@@ -793,12 +802,14 @@ app.get("/transactions", async (req, res, next) => {
 const cashout = async () => {
   theLoop = await Game.findById(GAME_LOOP_ID);
   playerIdList = theLoop.active_player_id_list;
+  console.log("playerIdList", playerIdList);
+  console.log("live_bettors_table", live_bettors_table);
   crash_number = game_crash_value;
   let totalBetMined = 0;
   let taken = 0;
   let totalWins = 0;
-  for (const bettorObject of live_bettors_table) {
-    const currUser = await User.findById(bettorObject.the_user_id);
+  for (const user of playerIdList) {
+    const currUser = await User.findById(user);
     if (
       currUser.payout_multiplier > 0 &&
       currUser.payout_multiplier <= crash_number
