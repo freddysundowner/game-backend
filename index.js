@@ -693,28 +693,49 @@ app.post("/withdraw/response", async (req, res) => {
 });
 
 app.post("/withdraw", checkAuthenticated, async (req, res) => {
-  let amount = req.body.amount;
+  let amount = parseInt(req.body.amount);
+  //get withdraw charges
+  let charges = 0;
+  let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
+  if (gameSettings) {
+    charges = amount > 1000 ? 23 : parseInt(gameSettings.withdrawcharges);
+
+  }
+  let AmountWithCharges = amount + charges;
+  console.log(AmountWithCharges)
+  console.log(amount)
+
   if (amount > req.user.balance) {
     res.json({
       status: 400,
       message:
-        "you cannot withdraw more than KES " + req.user.balance.toFixed(2),
+        "you have insufficient balance to withdraw KES " + amount,
     });
   } else {
-    console.log(req.user);
+
+    if (amount < gameSettings.withdrawlimit) {
+      res.json({
+        status: 400,
+        message:
+          "you cannot withdraw less than KES " + gameSettings.withdrawlimit,
+      });
+      return;
+    }
+    let actualAmount = amount - charges;
+
     const transaction = new Transaction({
-      amount: amount,
+      amount: actualAmount,
       user: req.user._id,
       type: "withdraw",
       status: false,
+      charges
     });
     transaction.save();
-    console.log(transaction);
 
     Axios({
       method: "POST",
       data: {
-        amount,
+        amount: actualAmount,
         phone: req.user.phonenumber,
         transactionId: transaction._id,
       },
@@ -723,7 +744,7 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
     }).then(async (ress) => {
       if (ress.data.status == 200) {
         const currUser = await User.findOne({ _id: req.user._id });
-        currUser.balance -= amount;
+        currUser.balance = currUser.balance - AmountWithCharges;
         currUser.save();
       }
       res.json(ress.data);

@@ -21,11 +21,15 @@ const Transaction = new mongoose.Schema({
     },
     status: {
         type: Boolean,
-        default: false 
+        default: false
     },
     description: {
         type: String,
         default: ''
+    },
+    charges: {
+        type: Number,
+        default: 0
     }
 },
     { timestamps: true, autoCreate: true, autoIndex: true });

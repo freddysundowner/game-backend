@@ -17,6 +17,15 @@ const settings = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    withdrawcharges: {
+      type: Number,
+      default: 0,
+    },
+    withdrawlimit: {
+      type: Number,
+      default: 100,
+    },
+
   },
   {
     timestamps: true,
