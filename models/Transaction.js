@@ -15,6 +15,10 @@ const Transaction = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    total: {
+        type: Number,
+        default: 0
+    },
     type: {
         type: String,
         default: ''
@@ -30,7 +34,19 @@ const Transaction = new mongoose.Schema({
     charges: {
         type: Number,
         default: 0
-    }
+    },
+    balance: {
+        type: Number,
+        default: 0
+    },
+    voided: {
+        type: Boolean,
+        default:false
+    },
+    housedeductions: {
+        type: Number,
+        default:0
+    },
 },
     { timestamps: true, autoCreate: true, autoIndex: true });
 

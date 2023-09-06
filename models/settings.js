@@ -9,7 +9,7 @@ const settings = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    float: {
+    floatAmount: {
       type: Number,
       default: 0,
     },
@@ -25,7 +25,7 @@ const settings = new mongoose.Schema(
       type: Number,
       default: 100,
     },
-
+    
   },
   {
     timestamps: true,

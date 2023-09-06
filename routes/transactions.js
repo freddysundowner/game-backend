@@ -13,4 +13,9 @@ transactionRouter
     .get(
         transactions.dashboardTransactions
     )
+transactionRouter
+    .route(`/userbets`)
+    .get(
+        transactions.getUserBets
+    )
 module.exports = transactionRouter;

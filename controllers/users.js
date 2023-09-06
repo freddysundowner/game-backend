@@ -3,7 +3,7 @@ const User = require("../models/user");
 
 exports.getAllusers = async (req, res) => {
 
-    let { type, page, limit } = req.query;
+    let { type, page = 1, limit = 15 } = req.query;
     const queryObject = {};
 
 

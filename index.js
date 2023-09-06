@@ -51,7 +51,7 @@ let connections = [];
 
 let availableResources = 0;
 let safetyMargin = 0;
-let betLimit = 0;
+// let betLimit = 0;
 
 var ObjectId = require("mongodb").ObjectId;
 const GAME_LOOP_ID = process.env.GAME_LOOP_ID;
@@ -110,6 +110,8 @@ io.on("connection", async (socket) => {
   io.emit("newconection", connections);
   socket.emit("myconection", socket.id);
 
+
+
   socket.on("get_game_status", async (data) => {
     let theLoop = await Game.findById(GAME_LOOP_ID);
     // if (theLoop == null) {
@@ -135,12 +137,19 @@ io.on("connection", async (socket) => {
     io.emit("newconection", connections);
   });
   theLoop = await Game.findById(GAME_LOOP_ID);
+
+  //BOT
+
+
+  //BOT
+
+
   socket.on("bet", async (data) => {
     var bet_amount = data.bet_amount;
     var payout_multiplier = data.payout_multiplier;
 
     console.log("data", data);
-    gameId = data.gameId;
+//     gameId = data.gameId;
     var userid = data.userid;
     if (!betting_phase) {
       console.log({ customError: "IT IS NOT THE BETTING PHASE" });
@@ -174,8 +183,7 @@ io.on("connection", async (socket) => {
       });
       return;
     }
-
-    console.log("thisUser", thisUser);
+    //     console.log("thisUser", thisUser);
     thisUser.balance = thisUser.balance - bet_amount;
     const betId = new ObjectId();
     thisUser.bet_amount = bet_amount;
@@ -192,7 +200,7 @@ io.on("connection", async (socket) => {
       balance: thisUser.balance,
       betId,
     };
-    console.log("info_json", info_json);
+    //     console.log("info_json", info_json);
     live_bettors_table.push(info_json);
     io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
     socket.emit("success_betting", {
@@ -217,10 +225,16 @@ io.on("connection", async (socket) => {
       user: userid,
       bet_amount: bet_amount,
       _id: betId,
+      newbalance: 0
     });
     await bet.save();
   });
 
+  socket.on("rain_notify", async (data) => {
+    console.log("rain_notify");
+    socket.emit("rain_notify");
+  });
+  
   socket.on("receive_my_bets_table", async (data) => {
     let bets = await Bet.find({ user: data.id }).sort({ createdAt: -1 });
     socket.emit("receive_my_bets_table", JSON.stringify(bets));
@@ -229,7 +243,7 @@ io.on("connection", async (socket) => {
   socket.on("auto_cashout_early", async (data) => {
     var userid = data.userid;
     var payout_multiplier = data.payout_multiplier;
-    if (!game_phase) {
+    if (!game_phase) { 
       return;
     }
     cashOutNow(userid, "auto", payout_multiplier);
@@ -241,8 +255,9 @@ io.on("connection", async (socket) => {
       type == "auto"
         ? payout_multiplier
         : (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
+    let betters = getRealBetters();
     if (current_multiplier <= game_crash_value) {
-      for (const bettorObject of live_bettors_table) {
+      for (const bettorObject of betters) {
         if (bettorObject.the_user_id === userid) {
           bettorObject.cashout_multiplier = current_multiplier;
           bettorObject.profit =
@@ -262,12 +277,7 @@ io.on("connection", async (socket) => {
           }
           if (type == "auto") {
             socket.emit("auto_cashout_early", sendData);
-          }  
-          // console.log("live_bettors_table", live_bettors_table.length);
-          // const index = live_bettors_table.indexOf(bettorObject);
-
-          // live_bettors_table.splice(index, 1);
-          // console.log("live_bettors_table", live_bettors_table.length);
+          }
           io.emit(
             "receive_live_betting_table",
             JSON.stringify(live_bettors_table)
@@ -281,6 +291,7 @@ io.on("connection", async (socket) => {
           await Bet.findByIdAndUpdate(bettorObject.betId, {
             cashout_multiplier: current_multiplier,
             profit: bettorObject.profit,
+            newbalance: bettorObject.userdata.balance
           });
 
           let taken = (bettorObject.bet_amount * current_multiplier).toFixed(2);
@@ -309,6 +320,11 @@ const createGameStats = async (
   mined = 0,
   totalusers = 0
 ) => {
+	
+	console.log("createGameStats", gameId,taken,
+        totalWins,
+        mined,
+        totalusers,game_crash_value);
   let gamestats = await GameStats.findOneAndUpdate(
     { _id: gameId },
     {
@@ -318,6 +334,9 @@ const createGameStats = async (
         mined,
         totalusers,
       },
+      $set: {
+        crashPoint: game_crash_value
+      }
     },
     {
       upsert: true,
@@ -331,7 +350,7 @@ const createGameStats = async (
       {
         $inc: {
           totalamount: mined,
-          float: -taken,
+          floatAmount: -taken,
         },
       },
       {
@@ -705,16 +724,29 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
   let amount = parseInt(req.body.amount);
   //get withdraw charges
   let charges = 0;
+  let housedeductions = 0;
   let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
   if (gameSettings) {
     charges = amount > 1000 ? 23 : parseInt(gameSettings.withdrawcharges);
+    housedeductions = amount > 1000 ? 23 : parseInt(gameSettings.withdrawcharges);
 
   }
   let AmountWithCharges = amount + charges;
   console.log(AmountWithCharges)
   console.log(amount)
+  if (amount < gameSettings.withdrawlimit) {
+    res.json({
+      status: 400,
+      message:
+        "you cannot withdraw less than KES " + gameSettings.withdrawlimit,
+    });
+    return;
+  }
 
-  if (amount > req.user.balance) {
+
+  const currUser = await User.findOne({ _id: req.user._id });
+
+  if (amount > currUser.balance) {
     res.json({
       status: 400,
       message:
@@ -722,22 +754,33 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
     });
   } else {
 
-    if (amount < gameSettings.withdrawlimit) {
+    const transactionRes = await Transaction.find({
+      voided: false, status: false, user: req.user._id
+    });
+    if (transactionRes.length > 0) {
       res.json({
         status: 400,
         message:
-          "you cannot withdraw less than KES " + gameSettings.withdrawlimit,
+          "You have another transaction in progress please wait or contact support",
       });
       return;
     }
-    let actualAmount = amount - charges;
+
+    let actualAmount = amount - charges; // amount user will receive
+    let userBalance = currUser.balance - AmountWithCharges; // user balance after deducting amount withdrawn and the charges involved
+    currUser.balance = userBalance;
+    currUser.save();
 
     const transaction = new Transaction({
       amount: actualAmount,
+      total: amount,
       user: req.user._id,
       type: "withdraw",
       status: false,
-      charges
+      voided: false,
+      charges,
+      housedeductions,
+      balance: userBalance
     });
     transaction.save();
 
@@ -751,11 +794,6 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
       withCredentials: true,
       url: process.env.MPESA_WITHDRAW_URL,
     }).then(async (ress) => {
-      if (ress.data.status == 200) {
-        const currUser = await User.findOne({ _id: req.user._id });
-        currUser.balance = currUser.balance - AmountWithCharges;
-        currUser.save();
-      }
       res.json(ress.data);
     });
   }
@@ -803,7 +841,6 @@ const cashout = async () => {
   theLoop = await Game.findById(GAME_LOOP_ID);
   playerIdList = theLoop.active_player_id_list;
   console.log("playerIdList", playerIdList);
-  console.log("live_bettors_table", live_bettors_table);
   crash_number = game_crash_value;
   let totalBetMined = 0;
   let taken = 0;
@@ -824,7 +861,7 @@ const cashout = async () => {
     }
   }
   if (playerIdList.length > 0) {
-    createGameStats(taken, totalWins, totalBetMined, playerIdList.length);
+    await createGameStats(taken, totalWins, totalBetMined, playerIdList.length);
   }
   if (playerIdList.length == 0) {
     await GameStats.findByIdAndDelete(gameId);
@@ -840,7 +877,24 @@ const cashout = async () => {
   theLoop.active_player_id_list = [];
   live_bettors_table = [];
   await theLoop.save();
+
+
 };
+
+function filterObjectsWithKey(array, key) {
+  return array.filter(obj => obj.hasOwnProperty(key));
+}
+function filterObjectsWithoutKey(array, key) {
+  return array.filter(obj => !obj.hasOwnProperty(key));
+}
+
+
+getRealBetters = () => {
+  return filterObjectsWithoutKey(live_bettors_table, "key_us");
+}
+getBotBetters = () => {
+  return filterObjectsWithKey(live_bettors_table, "key_us");
+}
 
 // Run Game Loop
 let phase_start_time = Date.now();
@@ -848,24 +902,61 @@ setInterval(async () => {
   await loopUpdate();
 }, 1000);
 
+function generateRandomArray(min, max, arrayLength) {
+  const randomArray = [];
+
+  for (let i = 0; i < arrayLength; i++) {
+    const randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;
+    randomArray.push(randomNumber);
+  }
+
+  return randomArray;
+}
+
+setInterval(async () => {
+  const min = 1;
+  const max = 100;
+  const arrayLength = Math.floor(Math.random() * (100 - live_bettors_table.length + 1)) + live_bettors_table.length;
+  const randomArray = generateRandomArray(min, max, arrayLength);
+  io.emit("newconection", randomArray);
+}, 5000);
+
+
 // Game Loop
 const loopUpdate = async () => {
+
   let time_elapsed = (Date.now() - phase_start_time) / 1000.0;
   if (betting_phase) {
     if (time_elapsed > 10) {
       sent_cashout = false;
       betting_phase = false;
+      clearInterval(intervalId);
       game_phase = true;
-      if (live_bettors_table.length > 0) {
-        game_crash_value = generateCrashValue(live_bettors_table);
+
+      const betters = getRealBetters();
+      console.log("betters", betters.length);
+      if (betters.length > 0) {
+        let game_crash_value = generateCrashValue(betters);
+/*
+        if (newgame_crash_value < game_crash_value) {
+          game_crash_value = newgame_crash_value;
+        }
+*/
+
+        if (game_crash_value < 1) {
+          game_crash_value = 1.1;
+        }
+        console.log("newgame_crash_value", game_crash_value);
       }
       io.emit("start_multiplier_count", gameId);
       phase_start_time = Date.now();
     }
   } else if (game_phase) {
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
+    cashOutBots(current_multiplier);
     if (current_multiplier > game_crash_value) {
       io.emit("stop_multiplier_count", game_crash_value.toFixed(2));
+
       game_phase = false;
       cashout_phase = true;
       phase_start_time = Date.now();
@@ -891,14 +982,15 @@ const loopUpdate = async () => {
     if (time_elapsed > 3) {
       cashout_phase = false;
       betting_phase = true;
-
       //set game params;
-      let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
-      if (gameSettings) {
-        availableResources = gameSettings.float;
-        safetyMargin = gameSettings.safetyMargin;
-        betLimit = gameSettings.betlimit;
-      }
+        let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
+        console.log(gameSettings)
+        if (gameSettings) {
+          availableResources = gameSettings.floatAmount <= 40000 ? 10000 : gameSettings.floatAmount;
+          safetyMargin = 0;
+          betLimit = gameSettings.betlimit;
+        }
+     
 
       let randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
       if (randomInt % 33 == 0) {
@@ -911,9 +1003,12 @@ const loopUpdate = async () => {
         game_crash_value = 0.01 + 0.99 / random_int_0_to_1;
         game_crash_value = Math.round(game_crash_value * 100) / 100;
       }
+      console.log("old game_crash_value", game_crash_value);
 
       io.emit("update_user");
       io.emit("start_betting_phase");
+
+      botBetting()
       io.emit("testingvariable");
       let theLoop = await Game.findById(GAME_LOOP_ID);
       io.emit("crash_history", theLoop.previous_crashes);
@@ -923,17 +1018,63 @@ const loopUpdate = async () => {
   }
 };
 
-function generateCrashValue(live_bettors_table) {
-  const total = live_bettors_table.reduce(
+let intervalId;
+let u = 0;
+const botBetting = () => {
+  // Start the first interval
+  let i = Math.floor(Math.random() * (10 - 1)) + 1
+  let usersCount = Math.floor(Math.random() * (15 - 4)) + 4
+  simulateBotBetting(i);
+  intervalId = setInterval(() => {
+    if (usersCount === u) {
+      u = 0;
+      clearInterval(intervalId);
+    }
+    u++;
+    i = Math.floor(Math.random() * (10 - 1)) + 1
+    simulateBotBetting(i);
+  }, 500);
+}
+
+
+const cashOutBots = (current_multiplier) => {
+  if (!game_phase) {
+    return;
+  }
+  let bots = getBotBetters();
+  for (const bettorObject of bots) {
+    if (bettorObject.key_us == true
+      && bettorObject.b_bet_live == true
+      && bettorObject.payout_multiplier <= current_multiplier) {
+      bettorObject.cashout_multiplier = current_multiplier;
+      bettorObject.profit =
+        bettorObject.bet_amount * current_multiplier -
+        bettorObject.bet_amount;
+      bettorObject.b_bet_live = false;
+      io.emit(
+        "receive_live_betting_table",
+        JSON.stringify(bots)
+      );
+      break;
+    }
+  }
+
+
+}
+function generateCrashValue(betters) {
+  const total = betters.reduce(
     (acc, obj) => acc + obj.bet_amount,
     0
   );
+  
+  console.log("availableResources",availableResources)
+//   let availableResources = 10000;
 
   const randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
   if (randomInt % 33 === 0) {
     return 1;
   } else {
-    const totalBets = live_bettors_table.length * total;
+    const totalBets = betters.length * total;
     const maxAllowedCrashValue =
       (availableResources - safetyMargin) / totalBets;
     const random_int_0_to_1 = Math.random();
@@ -944,3 +1085,56 @@ function generateCrashValue(live_bettors_table) {
     return Math.round(adjustedCrashValue * 100) / 100;
   }
 }
+
+// Original user data
+const originalUserData = {
+  "avatar": "av-1.png",
+  "bet_amount": 0,
+  "payout_multiplier": 0,
+  "_id": "",
+};
+
+function generateRandomNumberWithSpecifiedValues() {
+  // Array of specified values
+  const specifiedValues = [5, 10, 15, 20, 30, 50, 75, 90, 100, 150, 200, 500, 700, 1000, 1500, 2000, 2500, 3000];
+
+  // Generate a random index within the range of the array length
+  const randomIndex = Math.floor(Math.random() * specifiedValues.length);
+
+  // Get the randomly selected value from the array
+  const randomNumber = specifiedValues[randomIndex];
+
+  return randomNumber;
+}
+
+// Function to randomize user data
+function randomizeUserData(userData) {
+  const minMultiplier = 1;  // Minimum payout multiplier
+  const maxMultiplier = 10; // Maximum payout multiplier
+  userData.bet_amount = generateRandomNumberWithSpecifiedValues();
+  userData.payout_multiplier = Math.random() * (maxMultiplier - minMultiplier) + minMultiplier;
+  return userData;
+}
+
+
+const simulateBotBetting = async (i) => {
+  const maxMultiplier = 10;   // Define the maximum payout multiplier
+  const randomizedUserData = randomizeUserData({ ...originalUserData, _id: `user_${i}`, avatar: `av-${i}.png` });
+  // Simulate bot betting logic
+  try {
+    const botBetInfo = {
+      the_user_id: i,
+      key_us:true,
+      bet_amount: randomizedUserData.bet_amount,
+      userdata: randomizedUserData, // Replace with bot user data
+      cashout_multiplier: null,
+      b_bet_live: true,
+      payout_multiplier: Math.floor(Math.random() * maxMultiplier) + 1,
+    };
+
+    live_bettors_table.push(botBetInfo);
+    io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
+  } catch (error) {
+    console.error("Error simulating bot betting:", error);
+  }
+}; 

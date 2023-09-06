@@ -19,6 +19,10 @@ const gamestats = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    taken: {
+        type: Number,
+        default: 0
+    },
     
 
 },

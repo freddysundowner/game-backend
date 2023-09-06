@@ -13,6 +13,7 @@ exports.getSettings = async (req, res) => {
 
 exports.updateSettings = async (req, res) => {
   try {
+	  console.log(req.body)
     if (!req.body || Object.keys(req.body).length == 0) {
       return res.status(500).send({
         message: "nothing to update",

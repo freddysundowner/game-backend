@@ -18,8 +18,12 @@ const Bet = new mongoose.Schema({
     bet_amount: {
         type: Number,
         default: 0
-    }
+    },
+    newbalance: {
+        type: Number,
+        default: 0
+    },
 },
     { timestamps: true, autoCreate: true, autoIndex: true });
 
-module.exports = mongoose.model("Bet", Bet);
+module.exports = mongoose.model("Bet", Bet); 

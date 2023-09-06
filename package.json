@@ -24,11 +24,9 @@
     "passport": "^0.4.1",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
-    "prom-client": "^14.2.0",
     "redis": "3.1.2",
     "socket.io": "^4.5.1",
-    "statman-stopwatch": "^2.13.0",
-    "winston": "^3.10.0"
+    "statman-stopwatch": "^2.13.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
