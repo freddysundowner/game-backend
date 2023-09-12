@@ -76,7 +76,7 @@ app.use(
   jwt({
     secret: process.env.PASSPORT_SECRET,
     algorithms: ['HS256'],
-  }).unless({ path: ['/auth/login', '/auth/register'] }) // Define endpoints that don't require authentication.
+  }).unless({ path: ['/login/', '/register/'] }) // Define endpoints that don't require authentication.
 );
 // Custom error handling middleware for handling missing tokens.
 app.use((err, req, res, next) => {
@@ -90,10 +90,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(require("./routes/ROUTE_MOUNTER"));
 app.use(
-  cors({
-    origin: true,
-    credentials: true,
-  })
+  cors()
 );
 const store = new MongoDBStore({
   uri: process.env.MONGOOSE_DB_LINK,
