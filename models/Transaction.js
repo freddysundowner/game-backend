@@ -7,6 +7,11 @@ const Transaction = new mongoose.Schema({
         ref: "user",
         default: null,
     },
+    refered: {
+        type: Schema.Types.ObjectId,
+        ref: "user",
+        default: null,
+    },
     transaction_code: {
         type: String,
         default: ""
@@ -41,11 +46,11 @@ const Transaction = new mongoose.Schema({
     },
     voided: {
         type: Boolean,
-        default:false
+        default: false
     },
     housedeductions: {
         type: Number,
-        default:0
+        default: 0
     },
 },
     { timestamps: true, autoCreate: true, autoIndex: true });

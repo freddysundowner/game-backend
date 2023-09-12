@@ -32,36 +32,38 @@ const connect = function () {
   );
 
 
-  mongoose.connection.once("open", async () => {
-    try {
-      const usersToUpdate = await User.find({ referalCode: { $exists: false } });
-
-      for (const user of usersToUpdate) {
-        let referalCode;
-        let isUnique = false;
-
-        while (!isUnique) {
-          referalCode = Math.floor(Math.random() * 1000000);
-
-          // Check if the generated code is unique among all users
-          const exists = await User.exists({ referalCode: referalCode });
-
-          if (!exists) {
-            // The code is unique, exit the loop
-            isUnique = true;
+  /*
+    mongoose.connection.once("open", async () => {
+      try {
+        const usersToUpdate = await User.find({ referalCode: { $exists: false } });
+  
+        for (const user of usersToUpdate) {
+          let referalCode;
+          let isUnique = false;
+  
+          while (!isUnique) {
+            referalCode = Math.floor(Math.random() * 1000000);
+  
+            // Check if the generated code is unique among all users
+            const exists = await User.exists({ referalCode: referalCode });
+  
+            if (!exists) {
+              // The code is unique, exit the loop
+              isUnique = true;
+            }
           }
+  
+          // Set the generated code and save the user
+          user.referalCode = referalCode;
+          await user.save();
+          console.log(`Updated referalCode for user ${user.username}`);
         }
-
-        // Set the generated code and save the user
-        user.referalCode = referalCode;
-        await user.save();
-        console.log(`Updated referalCode for user ${user.username}`);
+        console.log("All users updated.");
+      } catch (err) {
+        console.error("Error updating users:", err);
       }
-      console.log("All users updated.");
-    } catch (err) {
-      console.error("Error updating users:", err);
-    }
-  });
+    });
+  */
 
 
 };
@@ -889,9 +891,9 @@ app.post("/deposit", async (req, res) => {
     await transaction.save();
 
     // referer
-    console.log("referedBy", referedBy);
+    console.log("referedBy", currUser.referedBy);
     if (currUser.referedBy) {
-      let settings = Settings.findOne(process.env.SETTINGS_ID);
+      let settings = await Settings.findById(process.env.SETTINGS_ID);
       console.log("settings", settings);
       if (settings.allowrefer === true) {
         let commission = (settings.referalCommision / 100) * amount;
@@ -899,7 +901,7 @@ app.post("/deposit", async (req, res) => {
           { _id: currUser.referedBy },
           {
             $inc: {
-              balance: commission,
+              referalEarnings: commission,
             },
           },
           {
@@ -915,7 +917,7 @@ app.post("/deposit", async (req, res) => {
             transaction_code: transaction_code,
             type: "referals",
             status: true,
-            balance: newUser.balance 
+            balance: newUser.balance
           });
           await transaction.save();
         }

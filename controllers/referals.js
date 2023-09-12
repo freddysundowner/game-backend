@@ -10,37 +10,16 @@ exports.getUserReferals = async (req, res) => {
       model: 'User',
       select: 'username _id createdAt updatedAt'
     });
-    console.log(referals);
-    const earnings = await Referal.aggregate([
-      {
-        $match: {
-          user: req.user._id,
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          earnings: { $sum: "$earnings" },
-          count: {
-            $sum: 1,
-          },
-        },
-      },
-    ]);
-    const transactions = await Transactions.aggregate([
-      {
-        $match: {
-          user: req.user._id,
-          type: 'referals',
-        },
-      },
-    ]);
+    const transactions = await Transactions.find({ "user": req.user._id, type: 'referals' }).populate({
+      path: 'refered',
+      model: 'User',
+      select: 'username _id createdAt updatedAt'
+    });
     res.json({
       referalCommision: settingsReponse.referalCommision,
       referals,
-      earnings: earnings.length > 0 ? earnings[0]['earnings'] : 0,
       transactions: transactions,
-      
+
     });
   } catch (error) {
     res.status(500).send({
