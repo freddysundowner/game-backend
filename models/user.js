@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { Schema, model } = mongoose;
 const user = new mongoose.Schema({
   username: {
     type: String,
@@ -44,6 +45,15 @@ const user = new mongoose.Schema({
     type: String,
     default: ""
   },
+  chatblocked: {
+    type: Boolean,
+    default: false
+  },
+  lastbetId: {
+        type: Schema.Types.ObjectId,
+        ref: "Bet",
+        default: null,
+    },
 
 },
   {

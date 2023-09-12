@@ -171,6 +171,22 @@ io.on("connection", async (socket) => {
       return;
     }
     thisUser = await User.findById(userid);
+     if (bet_amount < 2) { 
+      console.log("MIN BET IS KES 2, yours is "+bet_amount);
+      socket.emit("success_betting", {
+        status: false,
+        message: "MIN BET IS KES 2",
+      });
+      return;
+    }
+    if (thisUser.status !=null && thisUser.status === false) { 
+      console.log("YOUR ACCOUNT HAS BEEN SUSPENDED");
+      socket.emit("success_betting", {
+        status: false,
+        message: "YOUR ACCOUNT HAS BEEN SUSPENDED",
+      });
+      return;
+    }
     if (!thisUser) {
       console.log("ERROR BETTING");
       return;
@@ -212,6 +228,7 @@ io.on("connection", async (socket) => {
     await User.findByIdAndUpdate(userid, {
       bet_amount: bet_amount,
       payout_multiplier: payout_multiplier,
+      lastbetId: betId
     });
     await User.findByIdAndUpdate(userid, {
       balance: thisUser.balance,
@@ -229,12 +246,12 @@ io.on("connection", async (socket) => {
     });
     await bet.save();
   });
-
-  socket.on("rain_notify", async (data) => {
-    console.log("rain_notify");
-    socket.emit("rain_notify");
-  });
   
+    socket.on("rain_notify", async (data) => {
+	    console.log("rain_notify");
+	    io.emit("rain_notify");
+	  });
+
   socket.on("receive_my_bets_table", async (data) => {
     let bets = await Bet.find({ user: data.id }).sort({ createdAt: -1 });
     socket.emit("receive_my_bets_table", JSON.stringify(bets));
@@ -243,7 +260,7 @@ io.on("connection", async (socket) => {
   socket.on("auto_cashout_early", async (data) => {
     var userid = data.userid;
     var payout_multiplier = data.payout_multiplier;
-    if (!game_phase) { 
+    if (!game_phase) {
       return;
     }
     cashOutNow(userid, "auto", payout_multiplier);
@@ -358,8 +375,8 @@ const createGameStats = async (
         returnOriginal: false,
       }
     );
-  }
-};
+  } 
+}; 
 
 app.post("/login", (req, res, next) => {
   let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber);
@@ -690,6 +707,7 @@ app.post("/verify_code", async (req, res) => {
       transaction_code: transcode,
       type: "deposit",
       status: true,
+      balance: currUser.balance
     });
     await transaction.save();
 
@@ -720,8 +738,35 @@ app.post("/withdraw/response", async (req, res) => {
   console.log(transactionRes);
 });
 
-app.post("/withdraw", checkAuthenticated, async (req, res) => {
-  let amount = parseInt(req.body.amount);
+
+// In-memory storage to track the last request timestamp for each IP address
+const requestTimestamps = new Map();
+
+// Define the minimum time interval (in milliseconds) between requests
+const minTimeInterval = 20000; // Adjust this value as needed (5 seconds in this example)
+
+// Middleware to prevent multiple calls from the same IP within a time interval
+function preventMultipleCalls(req, res, next) {
+  const clientIP = req.ip; // Extract the client's IP address
+
+  // Get the timestamp of the last request from this IP
+  const lastRequestTimestamp = requestTimestamps.get(clientIP);
+
+  if (lastRequestTimestamp && Date.now() - lastRequestTimestamp < minTimeInterval) {
+    return res.status(429).json({ error: 'Multiple requests from the same IP within a short time period are not allowed.' });
+  }
+
+  // Update the last request timestamp for this IP
+  requestTimestamps.set(clientIP, Date.now());
+  console.log(requestTimestamps);
+
+  next();
+}
+
+
+app.post("/withdraw", checkAuthenticated,preventMultipleCalls, async (req, res) => {
+	console.log("withdraw attempt", req.user)
+ let amount = parseInt(req.body.amount);
   //get withdraw charges
   let charges = 0;
   let housedeductions = 0;
@@ -729,73 +774,114 @@ app.post("/withdraw", checkAuthenticated, async (req, res) => {
   if (gameSettings) {
     charges = amount > 1000 ? 23 : parseInt(gameSettings.withdrawcharges);
     housedeductions = amount > 1000 ? 23 : parseInt(gameSettings.withdrawcharges);
-
   }
-  let AmountWithCharges = amount + charges;
+  let AmountWithCharges = parseInt(amount + charges);
   console.log(AmountWithCharges)
   console.log(amount)
   if (amount < gameSettings.withdrawlimit) {
+	console.log("you cannot withdraw less than KES 999 - ");
     res.json({
       status: 400,
       message:
         "you cannot withdraw less than KES " + gameSettings.withdrawlimit,
     });
-    return;
-  }
-
-
-  const currUser = await User.findOne({ _id: req.user._id });
-
-  if (amount > currUser.balance) {
-    res.json({
-      status: 400,
-      message:
-        "you have insufficient balance to withdraw KES " + amount,
-    });
-  } else {
-
-    const transactionRes = await Transaction.find({
-      voided: false, status: false, user: req.user._id
-    });
-    if (transactionRes.length > 0) {
-      res.json({
-        status: 400,
-        message:
-          "You have another transaction in progress please wait or contact support",
-      });
-      return;
-    }
-
-    let actualAmount = amount - charges; // amount user will receive
-    let userBalance = currUser.balance - AmountWithCharges; // user balance after deducting amount withdrawn and the charges involved
-    currUser.balance = userBalance;
-    currUser.save();
-
-    const transaction = new Transaction({
-      amount: actualAmount,
-      total: amount,
-      user: req.user._id,
-      type: "withdraw",
-      status: false,
-      voided: false,
-      charges,
-      housedeductions,
-      balance: userBalance
-    });
-    transaction.save();
-
-    Axios({
-      method: "POST",
-      data: {
-        amount: actualAmount,
-        phone: req.user.phonenumber,
-        transactionId: transaction._id,
-      },
-      withCredentials: true,
-      url: process.env.MPESA_WITHDRAW_URL,
-    }).then(async (ress) => {
-      res.json(ress.data);
-    });
+  }else{
+	  const currUser = await User.findOne({ _id: req.user._id });
+	  if(currUser.status ==false){
+				    console.log("your account has been suspended");
+		   res.json({
+	      status: 400,
+	      message:
+	        "your account has been suspended ",
+	    });
+	  }else{
+  
+		  console.log(currUser.balance)
+		  
+		  if (currUser.balance < 0) {
+				    console.log("you have insufficient balance to withdraw KES 888 - " + amount);
+		    res.json({
+		      status: 400,
+		      message:
+		        "you have insufficient balance to withdraw KES " + amount,
+		    });
+		    return;
+		  }
+		
+		  if (amount > currUser.balance) {
+				    console.log("you have insufficient balance to withdraw KES " + amount);
+		    res.json({
+		      status: 400,
+		      message:
+		        "you have insufficient balance to withdraw KES " + amount,
+		    });
+		  } else {
+			  	const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+			    const transactionRes = await Transaction.find({
+				  user: req.user._id,
+				  createdAt: { $gt: fiveMinutesAgo } 
+			    });
+			    console.log(transactionRes);
+			    if (transactionRes.length > 0) {
+				    console.log("You have another transaction in progress please wait or contact support");
+			      res.json({
+			        status: 400,
+			        message:
+			          "You have another transaction in progress please wait or contact support",
+			      });
+			    }else{
+				    let actualAmount = amount - charges; 
+				    console.log("actualAmount",actualAmount) 
+				    console.log("AmountWithCharges",AmountWithCharges)  
+				    console.log("amount",amount)  
+				    console.log("actualAmount",actualAmount)  
+				    let userBalance = currUser.balance - amount;   
+				    console.log("userBalance",userBalance)  
+				    currUser.balance = userBalance;
+				    currUser.save();
+				    const transaction = new Transaction({
+				      amount: actualAmount,
+				      total: amount,
+				      user: req.user._id,
+				      type: "withdraw",
+				      status: false,
+				      voided: false,
+				      charges,
+				      housedeductions,
+				      balance: userBalance
+				    });
+				    transaction.save();
+			    
+				/*
+				    if(req.user.phonenumber ==='254715363474'){
+					    res.json({"status":true});
+						return;
+				    }
+				*/
+				
+				console.log("calling withdraw",{
+				        amount: actualAmount,
+				        phone: req.user.phonenumber,
+				        transactionId: transaction._id,
+				      })
+				     
+				
+								    Axios({
+				      method: "POST",
+				      data: {
+				        amount: actualAmount,
+				        phone: req.user.phonenumber,
+				        transactionId: transaction._id,
+				      },
+				      withCredentials: true,
+				      url: process.env.MPESA_WITHDRAW_URL,
+				    }).then(async (ress) => {
+				      res.json(ress.data);
+				    });
+				
+			}
+		}
+	}
   }
 });
 app.post("/deposit", async (req, res) => {
@@ -824,6 +910,7 @@ app.post("/deposit", async (req, res) => {
       transaction_code: transaction_code,
       type: "deposit",
       status: true,
+      balance: currUser.balance
     });
     await transaction.save();
     res.json(currUser);
@@ -858,6 +945,13 @@ const cashout = async () => {
       await currUser.save();
     } else {
       totalBetMined += currUser.bet_amount;
+      if(currUser.lastbetId){
+	  	  await Bet.findByIdAndUpdate(currUser.lastbetId, {
+	        cashout_multiplier: 0,
+	        profit: 0,
+	        newbalance: currUser.balance
+	      });
+      }
     }
   }
   if (playerIdList.length > 0) {
@@ -936,17 +1030,16 @@ const loopUpdate = async () => {
       const betters = getRealBetters();
       console.log("betters", betters.length);
       if (betters.length > 0) {
-        let game_crash_value = generateCrashValue(betters);
-/*
-        if (newgame_crash_value < game_crash_value) {
+		let newgame_crash_value = generateCrashValue(betters);
+        console.log("newgame_crash_value", newgame_crash_value);
+        if (newgame_crash_value <  game_crash_value) {
           game_crash_value = newgame_crash_value;
         }
-*/
 
         if (game_crash_value < 1) {
           game_crash_value = 1.1;
         }
-        console.log("newgame_crash_value", game_crash_value);
+        console.log("final_crash_value", game_crash_value);
       }
       io.emit("start_multiplier_count", gameId);
       phase_start_time = Date.now();
@@ -986,7 +1079,7 @@ const loopUpdate = async () => {
         let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
         console.log(gameSettings)
         if (gameSettings) {
-          availableResources = gameSettings.floatAmount <= 40000 ? 10000 : gameSettings.floatAmount;
+          availableResources = gameSettings.floatAmount <= 30000 ? 10000 : gameSettings.floatAmount;
           safetyMargin = 0;
           betLimit = gameSettings.betlimit;
         }

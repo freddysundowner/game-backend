@@ -26,4 +26,4 @@ const Bet = new mongoose.Schema({
 },
     { timestamps: true, autoCreate: true, autoIndex: true });
 
-module.exports = mongoose.model("Bet", Bet); 
+module.exports = mongoose.model("Bet", Bet);
