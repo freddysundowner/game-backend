@@ -917,7 +917,8 @@ app.post("/deposit", async (req, res) => {
             transaction_code: transaction_code,
             type: "referals",
             status: true,
-            balance: newUser.balance
+            balance: newUser.balance,
+            refered: currUser._id
           });
           await transaction.save();
         }
