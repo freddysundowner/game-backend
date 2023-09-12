@@ -24,7 +24,15 @@ const settings = new mongoose.Schema(
     withdrawlimit: {
       type: Number,
       default: 100,
+    }, 
+    referalCommision: {
+      type: Number,
+      default: 0,
     },
+    allowrefer: {
+      type: Boolean,
+      default: false,
+    }, 
     
   },
   {

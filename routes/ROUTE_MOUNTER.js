@@ -1,9 +1,12 @@
 const express = require("express");
 const user = require("./user");
 const transations = require("./transactions");
-const settings = require("./settings");
+const referalaccount = require("./referals");
+const auth = require("./auth");
+const { checkAuthenticated } = require("../shared/functions");
 
 module.exports = app = express();
 app.use("/users", user);
 app.use("/dashboardtransactions", transations);
-app.use("/settings", settings);
+app.use("/referalaccount", checkAuthenticated, referalaccount);
+app.use("/auth", auth);

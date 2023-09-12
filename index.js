@@ -12,7 +12,7 @@ const Axios = require("axios");
 const app = express();
 const server = http.createServer(app);
 
-const functions = require("./shared/functions");
+let { checkAuthenticated, validateKenyanPhoneNumber, getPhoneNumberWithoutPlus, sendSms } = require("./shared/functions");
 require("dotenv").config();
 
 // Connect to MongoDB
@@ -30,6 +30,40 @@ const connect = function () {
       }
     }
   );
+
+
+  mongoose.connection.once("open", async () => {
+    try {
+      const usersToUpdate = await User.find({ referalCode: { $exists: false } });
+
+      for (const user of usersToUpdate) {
+        let referalCode;
+        let isUnique = false;
+
+        while (!isUnique) {
+          referalCode = Math.floor(Math.random() * 1000000);
+
+          // Check if the generated code is unique among all users
+          const exists = await User.exists({ referalCode: referalCode });
+
+          if (!exists) {
+            // The code is unique, exit the loop
+            isUnique = true;
+          }
+        }
+
+        // Set the generated code and save the user
+        user.referalCode = referalCode;
+        await user.save();
+        console.log(`Updated referalCode for user ${user.username}`);
+      }
+      console.log("All users updated.");
+    } catch (err) {
+      console.error("Error updating users:", err);
+    }
+  });
+
+
 };
 connect();
 
@@ -71,15 +105,14 @@ server.listen(process.env.PORT, function (err) {
   console.log("server listening on: ", ":", process.env.PORT);
 });
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(require("./routes/ROUTE_MOUNTER"));
 app.use(
   cors({
     origin: true,
     credentials: true,
   })
 );
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 const store = new MongoDBStore({
   uri: process.env.MONGOOSE_DB_LINK,
   expires: 1000 * 60 * 60,
@@ -96,6 +129,7 @@ app.use(
 app.use(cookieParser(process.env.PASSPORT_SECRET));
 app.use(passport.initialize());
 app.use(passport.session());
+app.use(require("./routes/ROUTE_MOUNTER"));
 require("./passportConfig")(passport);
 
 app.get("/", async (req, res) => {
@@ -149,7 +183,7 @@ io.on("connection", async (socket) => {
     var payout_multiplier = data.payout_multiplier;
 
     console.log("data", data);
-//     gameId = data.gameId;
+    //     gameId = data.gameId;
     var userid = data.userid;
     if (!betting_phase) {
       console.log({ customError: "IT IS NOT THE BETTING PHASE" });
@@ -171,15 +205,15 @@ io.on("connection", async (socket) => {
       return;
     }
     thisUser = await User.findById(userid);
-     if (bet_amount < 2) { 
-      console.log("MIN BET IS KES 2, yours is "+bet_amount);
+    if (bet_amount < 2) {
+      console.log("MIN BET IS KES 2, yours is " + bet_amount);
       socket.emit("success_betting", {
         status: false,
         message: "MIN BET IS KES 2",
       });
       return;
     }
-    if (thisUser.status !=null && thisUser.status === false) { 
+    if (thisUser.status != null && thisUser.status === false) {
       console.log("YOUR ACCOUNT HAS BEEN SUSPENDED");
       socket.emit("success_betting", {
         status: false,
@@ -246,11 +280,11 @@ io.on("connection", async (socket) => {
     });
     await bet.save();
   });
-  
-    socket.on("rain_notify", async (data) => {
-	    console.log("rain_notify");
-	    io.emit("rain_notify");
-	  });
+
+  socket.on("rain_notify", async (data) => {
+    console.log("rain_notify");
+    io.emit("rain_notify");
+  });
 
   socket.on("receive_my_bets_table", async (data) => {
     let bets = await Bet.find({ user: data.id }).sort({ createdAt: -1 });
@@ -337,11 +371,11 @@ const createGameStats = async (
   mined = 0,
   totalusers = 0
 ) => {
-	
-	console.log("createGameStats", gameId,taken,
-        totalWins,
-        mined,
-        totalusers,game_crash_value);
+
+  console.log("createGameStats", gameId, taken,
+    totalWins,
+    mined,
+    totalusers, game_crash_value);
   let gamestats = await GameStats.findOneAndUpdate(
     { _id: gameId },
     {
@@ -375,16 +409,16 @@ const createGameStats = async (
         returnOriginal: false,
       }
     );
-  } 
-}; 
+  }
+};
 
 app.post("/login", (req, res, next) => {
-  let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber);
+  let phonewithplus = validateKenyanPhoneNumber(req.body.phonenumber);
   if (phonewithplus === null) {
     res.json({ status: 400, message: "Phone number is invalid" });
     return;
   }
-  req.body.phonenumber = functions.getPhoneNumberWithoutPlus(phonewithplus);
+  req.body.phonenumber = getPhoneNumberWithoutPlus(phonewithplus);
   passport.authenticate("local", async (err, user, info) => {
     if (err) throw err;
     if (!user) {
@@ -459,8 +493,8 @@ app.post("/changepassword", checkAuthenticated, async (req, res) => {
 });
 
 app.post("/sendotp", async (req, res) => {
-  let phonenumber = functions.validateKenyanPhoneNumber(req.body.phonenumber);
-  let phonenumberwithoutplus = functions.getPhoneNumberWithoutPlus(phonenumber);
+  let phonenumber = validateKenyanPhoneNumber(req.body.phonenumber);
+  let phonenumberwithoutplus = getPhoneNumberWithoutPlus(phonenumber);
   if (phonenumber === null) {
     res.json({
       status: 400,
@@ -470,7 +504,7 @@ app.post("/sendotp", async (req, res) => {
   }
   let user = await User.findOne({ phonenumber: phonenumberwithoutplus });
   if (user) {
-    let response = await functions.sendSms(phonenumberwithoutplus);
+    let response = await sendSms(phonenumberwithoutplus);
     if (response.status === 200) {
       const otpExpiry = Date.now() + 5 * 60 * 1000; // OTP expiry set to 5 minutes from now
 
@@ -504,7 +538,7 @@ app.post("/resetpassword", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     let user = await User.findOneAndUpdate(
       {
-        phonenumber: functions.getPhoneNumberWithoutPlus(
+        phonenumber: getPhoneNumberWithoutPlus(
           req.session.phonenumber
         ),
       },
@@ -530,61 +564,7 @@ app.post("/verifyotp", async (req, res) => {
     return res.json({ message: "Incorrect OTP", status: 400 });
   }
 });
-app.post("/register", (req, res) => {
-  if (req.body.password < 3) {
-    res.json({
-      status: 400,
-      message: "Password must be more than 3 characters",
-    });
-    return;
-  }
-  if (req.body.username.length < 3) {
-    res.json({
-      status: 400,
-      message: "Username must be more than 3 characters",
-    });
-    return;
-  }
-  if (req.body.phonenumber == "") {
-    res.json({ status: 400, message: "Phone number is required" });
-    return;
-  }
-  let phonewithplus = functions.validateKenyanPhoneNumber(req.body.phonenumber);
-  if (phonewithplus === null) {
-    res.json({ status: 400, message: "Phone number is invalid" });
-    return;
-  }
-  let phone = functions.getPhoneNumberWithoutPlus(phonewithplus);
-  var username = req.body.username;
-  var referal = req.body.referal;
 
-  User.findOne({ phonenumber: phone }, async (err, doc) => {
-    if (err) throw err;
-    if (doc) res.json({ status: 400, message: "Phone number already exists" });
-    if (!doc) {
-      const hashedPassword = await bcrypt.hash(req.body.password, 10);
-
-      const newUser = new User({
-        username: username,
-        password: hashedPassword,
-        phonenumber: phone,
-      });
-      await newUser.save();
-
-      /*
-            if (referal) {
-              console.log(referal)
-              var userId = Buffer.from(referal, 'base64').toString()
-              console.log(userId)
-      
-              await User.findByIdAndUpdate(userId, { $inc: { bonus: 1 } });
-            }
-      */
-
-      res.json({ status: 200, message: "Registered in successfully" });
-    }
-  });
-});
 // Routes
 app.get("/user", checkAuthenticated, async (req, res) => {
   res.send(req.user);
@@ -598,13 +578,7 @@ app.post("/user/update", checkAuthenticated, async (req, res) => {
   );
   res.send(response);
 });
-function checkAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
 
-  return res.send("No User Authentication");
-}
 
 app.get("/logout", (req, res) => {
   req.logout();
@@ -764,9 +738,9 @@ function preventMultipleCalls(req, res, next) {
 }
 
 
-app.post("/withdraw", checkAuthenticated,preventMultipleCalls, async (req, res) => {
-	console.log("withdraw attempt", req.user)
- let amount = parseInt(req.body.amount);
+app.post("/withdraw", checkAuthenticated, preventMultipleCalls, async (req, res) => {
+  console.log("withdraw attempt", req.user)
+  let amount = parseInt(req.body.amount);
   //get withdraw charges
   let charges = 0;
   let housedeductions = 0;
@@ -779,109 +753,109 @@ app.post("/withdraw", checkAuthenticated,preventMultipleCalls, async (req, res) 
   console.log(AmountWithCharges)
   console.log(amount)
   if (amount < gameSettings.withdrawlimit) {
-	console.log("you cannot withdraw less than KES 999 - ");
+    console.log("you cannot withdraw less than KES 999 - ");
     res.json({
       status: 400,
       message:
         "you cannot withdraw less than KES " + gameSettings.withdrawlimit,
     });
-  }else{
-	  const currUser = await User.findOne({ _id: req.user._id });
-	  if(currUser.status ==false){
-				    console.log("your account has been suspended");
-		   res.json({
-	      status: 400,
-	      message:
-	        "your account has been suspended ",
-	    });
-	  }else{
-  
-		  console.log(currUser.balance)
-		  
-		  if (currUser.balance < 0) {
-				    console.log("you have insufficient balance to withdraw KES 888 - " + amount);
-		    res.json({
-		      status: 400,
-		      message:
-		        "you have insufficient balance to withdraw KES " + amount,
-		    });
-		    return;
-		  }
-		
-		  if (amount > currUser.balance) {
-				    console.log("you have insufficient balance to withdraw KES " + amount);
-		    res.json({
-		      status: 400,
-		      message:
-		        "you have insufficient balance to withdraw KES " + amount,
-		    });
-		  } else {
-			  	const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-			    const transactionRes = await Transaction.find({
-				  user: req.user._id,
-				  createdAt: { $gt: fiveMinutesAgo } 
-			    });
-			    console.log(transactionRes);
-			    if (transactionRes.length > 0) {
-				    console.log("You have another transaction in progress please wait or contact support");
-			      res.json({
-			        status: 400,
-			        message:
-			          "You have another transaction in progress please wait or contact support",
-			      });
-			    }else{
-				    let actualAmount = amount - charges; 
-				    console.log("actualAmount",actualAmount) 
-				    console.log("AmountWithCharges",AmountWithCharges)  
-				    console.log("amount",amount)  
-				    console.log("actualAmount",actualAmount)  
-				    let userBalance = currUser.balance - amount;   
-				    console.log("userBalance",userBalance)  
-				    currUser.balance = userBalance;
-				    currUser.save();
-				    const transaction = new Transaction({
-				      amount: actualAmount,
-				      total: amount,
-				      user: req.user._id,
-				      type: "withdraw",
-				      status: false,
-				      voided: false,
-				      charges,
-				      housedeductions,
-				      balance: userBalance
-				    });
-				    transaction.save();
-			    
-				/*
-				    if(req.user.phonenumber ==='254715363474'){
-					    res.json({"status":true});
-						return;
-				    }
-				*/
-				
-				console.log("calling withdraw",{
-				        amount: actualAmount,
-				        phone: req.user.phonenumber,
-				        transactionId: transaction._id,
-				      })
-				     
-				
-								    Axios({
-				      method: "POST",
-				      data: {
-				        amount: actualAmount,
-				        phone: req.user.phonenumber,
-				        transactionId: transaction._id,
-				      },
-				      withCredentials: true,
-				      url: process.env.MPESA_WITHDRAW_URL,
-				    }).then(async (ress) => {
-				      res.json(ress.data);
-				    });
-				
-			}
-		}
-	}
+  } else {
+    const currUser = await User.findOne({ _id: req.user._id });
+    if (currUser.status == false) {
+      console.log("your account has been suspended");
+      res.json({
+        status: 400,
+        message:
+          "your account has been suspended ",
+      });
+    } else {
+
+      console.log(currUser.balance)
+
+      if (currUser.balance < 0) {
+        console.log("you have insufficient balance to withdraw KES 888 - " + amount);
+        res.json({
+          status: 400,
+          message:
+            "you have insufficient balance to withdraw KES " + amount,
+        });
+        return;
+      }
+
+      if (amount > currUser.balance) {
+        console.log("you have insufficient balance to withdraw KES " + amount);
+        res.json({
+          status: 400,
+          message:
+            "you have insufficient balance to withdraw KES " + amount,
+        });
+      } else {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const transactionRes = await Transaction.find({
+          user: req.user._id,
+          createdAt: { $gt: fiveMinutesAgo }
+        });
+        console.log(transactionRes);
+        if (transactionRes.length > 0) {
+          console.log("You have another transaction in progress please wait or contact support");
+          res.json({
+            status: 400,
+            message:
+              "You have another transaction in progress please wait or contact support",
+          });
+        } else {
+          let actualAmount = amount - charges;
+          console.log("actualAmount", actualAmount)
+          console.log("AmountWithCharges", AmountWithCharges)
+          console.log("amount", amount)
+          console.log("actualAmount", actualAmount)
+          let userBalance = currUser.balance - amount;
+          console.log("userBalance", userBalance)
+          currUser.balance = userBalance;
+          currUser.save();
+          const transaction = new Transaction({
+            amount: actualAmount,
+            total: amount,
+            user: req.user._id,
+            type: "withdraw",
+            status: false,
+            voided: false,
+            charges,
+            housedeductions,
+            balance: userBalance
+          });
+          transaction.save();
+
+          /*
+              if(req.user.phonenumber ==='254715363474'){
+                res.json({"status":true});
+              return;
+              }
+          */
+
+          console.log("calling withdraw", {
+            amount: actualAmount,
+            phone: req.user.phonenumber,
+            transactionId: transaction._id,
+          })
+
+
+          Axios({
+            method: "POST",
+            data: {
+              amount: actualAmount,
+              phone: req.user.phonenumber,
+              transactionId: transaction._id,
+            },
+            withCredentials: true,
+            url: process.env.MPESA_WITHDRAW_URL,
+          }).then(async (ress) => {
+            res.json(ress.data);
+          });
+
+        }
+      }
+    }
   }
 });
 app.post("/deposit", async (req, res) => {
@@ -913,6 +887,41 @@ app.post("/deposit", async (req, res) => {
       balance: currUser.balance
     });
     await transaction.save();
+
+    // referer
+    console.log("referedBy", referedBy);
+    if (currUser.referedBy) {
+      let settings = Settings.findOne(process.env.SETTINGS_ID);
+      console.log("settings", settings);
+      if (settings.allowrefer === true) {
+        let commission = (settings.referalCommision / 100) * amount;
+        let newUser = await User.findOneAndUpdate(
+          { _id: currUser.referedBy },
+          {
+            $inc: {
+              balance: commission,
+            },
+          },
+          {
+            upsert: true,
+            returnOriginal: false,
+          }
+        );
+
+        if (newUser) {
+          const transaction = new Transaction({
+            amount: commission,
+            user: newUser._id,
+            transaction_code: transaction_code,
+            type: "referals",
+            status: true,
+            balance: newUser.balance 
+          });
+          await transaction.save();
+        }
+      }
+    }
+
     res.json(currUser);
   }
 });
@@ -945,12 +954,12 @@ const cashout = async () => {
       await currUser.save();
     } else {
       totalBetMined += currUser.bet_amount;
-      if(currUser.lastbetId){
-	  	  await Bet.findByIdAndUpdate(currUser.lastbetId, {
-	        cashout_multiplier: 0,
-	        profit: 0,
-	        newbalance: currUser.balance
-	      });
+      if (currUser.lastbetId) {
+        await Bet.findByIdAndUpdate(currUser.lastbetId, {
+          cashout_multiplier: 0,
+          profit: 0,
+          newbalance: currUser.balance
+        });
       }
     }
   }
@@ -1030,9 +1039,9 @@ const loopUpdate = async () => {
       const betters = getRealBetters();
       console.log("betters", betters.length);
       if (betters.length > 0) {
-		let newgame_crash_value = generateCrashValue(betters);
+        let newgame_crash_value = generateCrashValue(betters);
         console.log("newgame_crash_value", newgame_crash_value);
-        if (newgame_crash_value <  game_crash_value) {
+        if (newgame_crash_value < game_crash_value) {
           game_crash_value = newgame_crash_value;
         }
 
@@ -1076,14 +1085,14 @@ const loopUpdate = async () => {
       cashout_phase = false;
       betting_phase = true;
       //set game params;
-        let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
-        console.log(gameSettings)
-        if (gameSettings) {
-          availableResources = gameSettings.floatAmount <= 30000 ? 10000 : gameSettings.floatAmount;
-          safetyMargin = 0;
-          betLimit = gameSettings.betlimit;
-        }
-     
+      let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
+      console.log(gameSettings)
+      if (gameSettings) {
+        availableResources = gameSettings.floatAmount <= 30000 ? 10000 : gameSettings.floatAmount;
+        safetyMargin = 0;
+        betLimit = gameSettings.betlimit;
+      }
+
 
       let randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
       if (randomInt % 33 == 0) {
@@ -1159,9 +1168,9 @@ function generateCrashValue(betters) {
     (acc, obj) => acc + obj.bet_amount,
     0
   );
-  
-  console.log("availableResources",availableResources)
-//   let availableResources = 10000;
+
+  console.log("availableResources", availableResources)
+  //   let availableResources = 10000;
 
   const randomInt = Math.floor(Math.random() * (9999999999 - 0 + 1) + 0);
   if (randomInt % 33 === 0) {
@@ -1217,7 +1226,7 @@ const simulateBotBetting = async (i) => {
   try {
     const botBetInfo = {
       the_user_id: i,
-      key_us:true,
+      key_us: true,
       bet_amount: randomizedUserData.bet_amount,
       userdata: randomizedUserData, // Replace with bot user data
       cashout_multiplier: null,

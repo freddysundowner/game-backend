@@ -54,9 +54,17 @@ async function sendSms(phonenumber) {
     } 
 
 }
+function checkAuthenticated(req, res, next) {
+    if (req.isAuthenticated()) {
+        return next();
+    }
+
+    return res.send("No User Authentication");
+}
 
 module.exports = {
     sendSms,
     validateKenyanPhoneNumber,
-    getPhoneNumberWithoutPlus
+    getPhoneNumberWithoutPlus,
+    checkAuthenticated
 }
