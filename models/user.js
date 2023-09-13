@@ -13,7 +13,7 @@ const user = new mongoose.Schema({
     type: String,
     default: 'av-1.png'
   },
-  password: {
+  password: { 
     type: String,
     required: true
   },

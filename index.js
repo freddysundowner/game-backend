@@ -771,27 +771,37 @@ app.post("/withdraw", checkAuthenticated, preventMultipleCalls, async (req, res)
           "your account has been suspended ",
       });
     } else {
+      let continueNow = true;
+      if (req.body.type === "referal") {
+        if (currUser.referalEarnings < 0 || currUser.referalEarnings < amount) {
+          console.log("you have insufficient balance to withdraw from referalEarnings" + amount);
+          res.json({
+            status: 400,
+            message:
+              "you have insufficient balance to withdraw KES " + amount,
+          });
+          continueNow = false;
+          return;
+        }
+      }
+
+
+      if (req.body.type === "account") {
+        if (currUser.balance < 0 || currUser.balance < amount) {
+          console.log("you have insufficient balance to withdraw from referalEarnings" + amount);
+          res.json({
+            status: 400,
+            message:
+              "you have insufficient balance to withdraw KES " + amount,
+          });
+          continueNow = false;
+          return;
+        }
+      }
 
       console.log(currUser.balance)
 
-      if (currUser.balance < 0) {
-        console.log("you have insufficient balance to withdraw KES 888 - " + amount);
-        res.json({
-          status: 400,
-          message:
-            "you have insufficient balance to withdraw KES " + amount,
-        });
-        return;
-      }
-
-      if (amount > currUser.balance) {
-        console.log("you have insufficient balance to withdraw KES " + amount);
-        res.json({
-          status: 400,
-          message:
-            "you have insufficient balance to withdraw KES " + amount,
-        });
-      } else {
+      if (continueNow === true) {
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
         const transactionRes = await Transaction.find({
           user: req.user._id,
@@ -811,9 +821,19 @@ app.post("/withdraw", checkAuthenticated, preventMultipleCalls, async (req, res)
           console.log("AmountWithCharges", AmountWithCharges)
           console.log("amount", amount)
           console.log("actualAmount", actualAmount)
-          let userBalance = currUser.balance - amount;
-          console.log("userBalance", userBalance)
-          currUser.balance = userBalance;
+          let userBalance = 0;
+          if (req.body.type === "account") {
+            userBalance = currUser.balance - amount;
+            console.log("userBalance", userBalance)
+            currUser.balance = userBalance;
+          }
+
+
+          if (req.body.type === "referal") {
+            userBalance = currUser.referalEarnings - amount;
+            console.log("referalEarnings", userBalance)
+            currUser.referalEarnings = userBalance;
+          }
           currUser.save();
           const transaction = new Transaction({
             amount: actualAmount,
@@ -827,13 +847,6 @@ app.post("/withdraw", checkAuthenticated, preventMultipleCalls, async (req, res)
             balance: userBalance
           });
           transaction.save();
-
-          /*
-              if(req.user.phonenumber ==='254715363474'){
-                res.json({"status":true});
-              return;
-              }
-          */
 
           console.log("calling withdraw", {
             amount: actualAmount,
@@ -857,6 +870,7 @@ app.post("/withdraw", checkAuthenticated, preventMultipleCalls, async (req, res)
 
         }
       }
+
     }
   }
 });
@@ -924,11 +938,9 @@ app.post("/deposit", async (req, res) => {
         }
       }
     }
-
     res.json(currUser);
   }
 });
-
 app.get("/transactions", async (req, res, next) => {
   var transactions = await Transaction.find({ user: req.user._id }).sort({
     createdAt: -1,
