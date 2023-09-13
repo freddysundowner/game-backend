@@ -33,6 +33,16 @@ const settings = new mongoose.Schema(
       type: Boolean,
       default: false,
     }, 
+    lastPromoTime: {
+      type: Date,
+      default: null,
+    },
+    promoAmount: {
+      type: Number,
+      default: 0,
+    }
+
+
     
   },
   {

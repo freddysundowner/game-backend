@@ -12,7 +12,8 @@ const Axios = require("axios");
 const app = express();
 const server = http.createServer(app);
 
-let { checkAuthenticated, validateKenyanPhoneNumber, getPhoneNumberWithoutPlus, sendSms } = require("./shared/functions");
+const schedule = require('node-schedule');
+let { checkAuthenticated, validateKenyanPhoneNumber, getPhoneNumberWithoutPlus, sendSms, getHighestCrasher, awardUsers } = require("./shared/functions");
 require("dotenv").config();
 
 // Connect to MongoDB
@@ -75,6 +76,7 @@ const Transaction = require("./models/Transaction");
 const User = require("./models/user");
 const Game = require("./models/game");
 const Settings = require("./models/settings");
+const promowiner = require("./models/promowiner");
 
 let gameId;
 let live_bettors_table = [];
@@ -162,6 +164,9 @@ io.on("connection", async (socket) => {
       status = { phase: "game_phase", info: phase_start_time };
     }
     socket.emit("get_game_status", status);
+
+
+    getHighestMultiplier()
   });
 
   //disconnect from socket
@@ -173,11 +178,6 @@ io.on("connection", async (socket) => {
     io.emit("newconection", connections);
   });
   theLoop = await Game.findById(GAME_LOOP_ID);
-
-  //BOT
-
-
-  //BOT
 
 
   socket.on("bet", async (data) => {
@@ -353,6 +353,7 @@ io.on("connection", async (socket) => {
             bettorObject.bet_amount
           ).toFixed(2);
           createGameStats(taken, totalWins, 0, 1);
+          getHighestMultiplier()
           break;
         }
       }
@@ -367,6 +368,17 @@ io.on("connection", async (socket) => {
   });
 });
 
+const getHighestMultiplier = async () => {
+
+  let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
+  if (gameSettings) {
+    let reponse = await getHighestCrasher(gameSettings.lastPromoTime);
+    io.emit('highest_crasher', reponse);
+  }
+
+
+}
+
 const createGameStats = async (
   taken = 0,
   totalWins = 0,
@@ -378,7 +390,7 @@ const createGameStats = async (
     totalWins,
     mined,
     totalusers, game_crash_value);
-  let gamestats = await GameStats.findOneAndUpdate(
+  await GameStats.findOneAndUpdate(
     { _id: gameId },
     {
       $inc: {
@@ -711,7 +723,17 @@ app.post("/withdraw/response", async (req, res) => {
   transactionRes.description =
     req.body.ResultCode == 1 ? req.body.mpesamessage : "";
   transactionRes.save();
-  console.log(transactionRes);
+
+  if (transactionRes.type == "crasher") {
+    let ponses = await promowiner.findByIdAndUpdate({ "transaction": req.body.transactionId }, { $set: { status: true } }).populate({
+      path: 'user',
+      model: 'User',
+      select: 'username _id phonenumber updatedAt'
+    });
+    let message = "Congratulations " + ponses.user.username + ", You have won KES " + ponses.amount + " for being the hieghest crasher of the hour.";
+    await sendSms(ponses.user.phonenumber, message);
+  }
+console.log(transactionRes);
 });
 
 
@@ -1254,4 +1276,19 @@ const simulateBotBetting = async (i) => {
   } catch (error) {
     console.error("Error simulating bot betting:", error);
   }
-}; 
+};
+
+
+
+
+// Define the schedule time using a cron-like syntax for every hour
+const scheduledTime = '* * * * *'; // This schedules the code to run every hour at the 0th minute (e.g., 1:00, 2:00, 3:00, ...)
+
+// Create a scheduled job
+schedule.scheduleJob(scheduledTime, function () {
+  // Your code to be executed every hour goes here
+  console.log('This code runs every hour.');
+  awardUsers()
+});
+
+
