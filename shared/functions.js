@@ -83,39 +83,58 @@ async function getHighestCrasher() {
         {
             $match: {
                 // createdAt: {
-                //     $gte: startDate,  // Start time of the one-hour range
-                //     $lt: endDate    // End time of the one-hour range
+                //     $gte: specificDate,
+                //     $lt: new Date(specificDate.getTime() + 60 * 60 * 1000) // Add 1 hour to the specific date
                 // }
-                cashout_multiplier: { $gt: 0 }
             }
         },
         {
-            $sort: { cashout_multiplier: -1 } // Sort by cashout_multiplier in descending order
+            $sort: { cashout_multiplier: -1 }
         },
         {
-            $limit: 3 // Limit the results to the top 3 bets
-        },
-        {
-            $lookup: {
-                from: "users", // Name of the User model
-                localField: "user",
-                foreignField: "_id", // Assuming "_id" is the field that links bets to users
-                as: "userDetails"
+            $group: {
+                _id: "$user",
+                topBets: { $push: "$$ROOT" }
             }
-        },
-        {
-            $unwind: "$userDetails" // Unwind the array produced by $lookup
         },
         {
             $project: {
-                id: "$userDetails._id",
-                username: "$userDetails.username",
-                cashout_multiplier: 1
+                _id: 0,
+                user: "$_id",
+                topBets: {
+                    $slice: ["$topBets", 3]
+                }
+            }
+        },
+        {
+            $unwind: "$topBets"
+        },
+        {
+            $lookup: {
+                from: "users", // Replace with the actual name of your "users" collection
+                localField: "user",
+                foreignField: "_id",
+                as: "userData"
+            }
+        },
+        {
+            $unwind: "$userData"
+        },
+        {
+            $replaceRoot: {
+                newRoot: {
+                    $mergeObjects: ["$topBets", { user: "$userData" }]
+                }
+            }
+        },
+        {
+            $project: {
+                userData: 0
             }
         }
     ]);
     return response;
-
+ 
 }
 
 function getHighestCashoutMultiplier(data) {
@@ -138,7 +157,7 @@ async function awardUsers() {
     const max = {
         _id: "6501bd48e3e1d0b938fbd8da",
         cashout_multiplier: 1.63,
-        id: "64e735f4373ec7220d93068c",
+        id: "64f1cdc2d8f6bb3c08218a16",
         username: "fred"
     };
 
