@@ -34,12 +34,16 @@ const settings = new mongoose.Schema(
       default: false,
     }, 
     lastPromoTime: {
-      type: Date,
-      default: null,
+      type: Number,
+      default: 0,
     },
     promoAmount: {
       type: Number,
       default: 0,
+    },
+    allowbots: {
+      type: Boolean,
+      default: false,
     }
 
 

@@ -13,7 +13,7 @@ const app = express();
 const server = http.createServer(app);
 
 const schedule = require('node-schedule');
-let { checkAuthenticated, validateKenyanPhoneNumber, getPhoneNumberWithoutPlus, sendSms, getHighestCrasher, awardUsers } = require("./shared/functions");
+let { checkAuthenticated, validateKenyanPhoneNumber, getPhoneNumberWithoutPlus, sendSms, getHighestCrasher, awardUsers, readJsonFile, filePath, saveDummy, generateRandomUsername } = require("./shared/functions");
 require("dotenv").config();
 
 // Connect to MongoDB
@@ -33,40 +33,6 @@ const connect = function () {
   );
 
 
-  /*
-    mongoose.connection.once("open", async () => {
-      try {
-        const usersToUpdate = await User.find({ referalCode: { $exists: false } });
-  
-        for (const user of usersToUpdate) {
-          let referalCode;
-          let isUnique = false;
-  
-          while (!isUnique) {
-            referalCode = Math.floor(Math.random() * 1000000);
-  
-            // Check if the generated code is unique among all users
-            const exists = await User.exists({ referalCode: referalCode });
-  
-            if (!exists) {
-              // The code is unique, exit the loop
-              isUnique = true;
-            }
-          }
-  
-          // Set the generated code and save the user
-          user.referalCode = referalCode;
-          await user.save();
-          console.log(`Updated referalCode for user ${user.username}`);
-        }
-        console.log("All users updated.");
-      } catch (err) {
-        console.error("Error updating users:", err);
-      }
-    });
-  */
-
-
 };
 connect();
 
@@ -80,13 +46,13 @@ const promowiner = require("./models/promowiner");
 
 let gameId;
 let live_bettors_table = [];
-let betting_phase = false;
+let betting_phase = true;
 let game_phase = false;
 let cashout_phase = true;
 let game_crash_value = -69;
 let sent_cashout = true;
 let connections = [];
-
+ 
 let availableResources = 0;
 let safetyMargin = 0;
 // let betLimit = 0;
@@ -165,9 +131,10 @@ io.on("connection", async (socket) => {
     }
     socket.emit("get_game_status", status);
 
-
-    getHighestMultiplier()
+    callHighestCrasher();
   });
+
+
 
   //disconnect from socket
   socket.on("disconnect", async () => {
@@ -196,7 +163,9 @@ io.on("connection", async (socket) => {
       return;
     }
     bDuplicate = false;
+    console.log("before live_bettors_table loop ", live_bettors_table);
     for (var i = 0; i < live_bettors_table.length; i++) {
+      console.log("ids", live_bettors_table[i].the_user_id);
       if (live_bettors_table[i].the_user_id === userid) {
         console.log({ customError: "You are already betting this round" });
         bDuplicate = true;
@@ -204,6 +173,7 @@ io.on("connection", async (socket) => {
       }
     }
     if (bDuplicate) {
+      console.log({ customError: "DUBLICATE DUBLICATE DUBLICATE " });
       return;
     }
     thisUser = await User.findById(userid);
@@ -252,13 +222,13 @@ io.on("connection", async (socket) => {
       balance: thisUser.balance,
       betId,
     };
-    //     console.log("info_json", info_json);
     live_bettors_table.push(info_json);
+    console.log("live_bettors_table", live_bettors_table.length);
     io.emit("receive_live_betting_table", JSON.stringify(live_bettors_table));
     socket.emit("success_betting", {
       status: true,
       message: "",
-      data: info_json,
+      data: info_json, 
     });
 
     await User.findByIdAndUpdate(userid, {
@@ -353,31 +323,23 @@ io.on("connection", async (socket) => {
             bettorObject.bet_amount
           ).toFixed(2);
           createGameStats(taken, totalWins, 0, 1);
-          getHighestMultiplier()
           break;
         }
       }
     }
   };
-  socket.on("manual_cashout_early", async (data) => {
+  socket.on("manual_cashout_early", (data, callback) => {
     var userid = data.userid;
+    console.log("!game_phase", !game_phase);
     if (!game_phase) {
       return;
     }
     cashOutNow(userid, "manual");
+    callback('Response from server');
+
   });
 });
 
-const getHighestMultiplier = async () => {
-
-  let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
-  if (gameSettings) {
-    let reponse = await getHighestCrasher(gameSettings.lastPromoTime);
-    io.emit('highest_crasher', reponse);
-  }
-
-
-}
 
 const createGameStats = async (
   taken = 0,
@@ -716,24 +678,31 @@ app.post("/withdraw/response", async (req, res) => {
   console.log(req.body);
   const transactionRes = await Transaction.findOne({
     _id: req.body.transactionId,
+  }).populate({
+    path: 'user',
+    model: 'User',
+    select: 'username _id phonenumber updatedAt'
   });
-  console.log(transactionRes);
-  transactionRes.status = req.body.ResultCode == 0;
-  transactionRes.transaction_code = req.body.TransID;
-  transactionRes.description =
-    req.body.ResultCode == 1 ? req.body.mpesamessage : "";
-  transactionRes.save();
+  if (transactionRes.status == false) {
+    console.log(transactionRes);
+    transactionRes.status = req.body.ResultCode == 0;
+    transactionRes.transaction_code = req.body.TransID;
+    transactionRes.description =
+      req.body.ResultCode == 1 ? req.body.mpesamessage : "";
+    transactionRes.save();
 
-  if (transactionRes.type == "crasher") {
-    let ponses = await promowiner.findByIdAndUpdate({ "transaction": req.body.transactionId }, { $set: { status: true } }).populate({
-      path: 'user',
-      model: 'User',
-      select: 'username _id phonenumber updatedAt'
-    });
-    let message = "Congratulations " + ponses.user.username + ", You have won KES " + ponses.amount + " for being the hieghest crasher of the hour.";
-    await sendSms(ponses.user.phonenumber, message);
+    if (transactionRes.type == "crasher") {
+      /*
+          let ponses = await promowiner.findByIdAndUpdate(
+              { "transaction": new ObjectId(req.body.transactionId) },
+            { $set: { status: true } }
+            );
+      */
+      let message = "Congratulations " + transactionRes.user.username + ", You have won KES " + transactionRes.amount + " for being the highest crasher of the hour.";
+      await sendSms(transactionRes.user.phonenumber, message);
+    }
   }
-console.log(transactionRes);
+  console.log(transactionRes);
 });
 
 
@@ -1014,11 +983,11 @@ const cashout = async () => {
     });
     gameId = game._id;
   }
+  decideHighestBetter(live_bettors_table);
   theLoop.active_player_id_list = [];
   live_bettors_table = [];
+  console.log("clearing the live_bettors_table");
   await theLoop.save();
-
-
 };
 
 function filterObjectsWithKey(array, key) {
@@ -1035,7 +1004,6 @@ getRealBetters = () => {
 getBotBetters = () => {
   return filterObjectsWithKey(live_bettors_table, "key_us");
 }
-
 // Run Game Loop
 let phase_start_time = Date.now();
 setInterval(async () => {
@@ -1070,6 +1038,7 @@ const loopUpdate = async () => {
     if (time_elapsed > 10) {
       sent_cashout = false;
       betting_phase = false;
+      io.emit("stop_betting_phase");
       clearInterval(intervalId);
       game_phase = true;
 
@@ -1092,14 +1061,15 @@ const loopUpdate = async () => {
     }
   } else if (game_phase) {
     current_multiplier = (1.0024 * Math.pow(1.0718, time_elapsed)).toFixed(2);
-    cashOutBots(current_multiplier);
     if (current_multiplier > game_crash_value) {
       io.emit("stop_multiplier_count", game_crash_value.toFixed(2));
-
       game_phase = false;
       cashout_phase = true;
       phase_start_time = Date.now();
+    } else {
+      io.emit("send_timer", current_multiplier);
     }
+    cashOutBots(current_multiplier);
   } else if (cashout_phase) {
     if (!sent_cashout) {
       cashout();
@@ -1123,7 +1093,7 @@ const loopUpdate = async () => {
       betting_phase = true;
       //set game params;
       let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
-      console.log(gameSettings)
+      // console.log(gameSettings)
       if (gameSettings) {
         availableResources = gameSettings.floatAmount <= 30000 ? 10000 : gameSettings.floatAmount;
         safetyMargin = 0;
@@ -1147,11 +1117,11 @@ const loopUpdate = async () => {
       io.emit("update_user");
       io.emit("start_betting_phase");
 
-      botBetting()
+      // botBetting()
       io.emit("testingvariable");
       let theLoop = await Game.findById(GAME_LOOP_ID);
       io.emit("crash_history", theLoop.previous_crashes);
-      live_bettors_table = [];
+      // live_bettors_table = [];
       phase_start_time = Date.now();
     }
   }
@@ -1230,7 +1200,8 @@ const originalUserData = {
   "avatar": "av-1.png",
   "bet_amount": 0,
   "payout_multiplier": 0,
-  "_id": "",
+  "_id": "6501bd48e3e1d0b938fbd8da",
+  "id": "64f1cdc2d8f6bb3c08218a16",
 };
 
 function generateRandomNumberWithSpecifiedValues() {
@@ -1251,6 +1222,7 @@ function randomizeUserData(userData) {
   const minMultiplier = 1;  // Minimum payout multiplier
   const maxMultiplier = 10; // Maximum payout multiplier
   userData.bet_amount = generateRandomNumberWithSpecifiedValues();
+  userData.username = generateRandomUsername();
   userData.payout_multiplier = Math.random() * (maxMultiplier - minMultiplier) + minMultiplier;
   return userData;
 }
@@ -1282,7 +1254,7 @@ const simulateBotBetting = async (i) => {
 
 
 // Define the schedule time using a cron-like syntax for every hour
-const scheduledTime = '* * * * *'; // This schedules the code to run every hour at the 0th minute (e.g., 1:00, 2:00, 3:00, ...)
+const scheduledTime = '0 * * * *'; // This schedules the code to run every hour at the 0th minute (e.g., 1:00, 2:00, 3:00, ...)
 
 // Create a scheduled job
 schedule.scheduleJob(scheduledTime, function () {
@@ -1292,3 +1264,45 @@ schedule.scheduleJob(scheduledTime, function () {
 });
 
 
+
+
+async function callHighestCrasher() {
+  console.log('getting highest crasher.');
+  let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
+  if (gameSettings) {
+    let reponse = await getHighestCrasher(gameSettings.lastPromoTime);
+    io.emit('highest_crasher', reponse);
+  }
+}
+
+
+const decideHighestBetter = async (live_bettors_table) => {
+  const newjson = await readJsonFile(filePath);
+  //   console.log("newjson", newjson);
+  let bb = filterObjectsWithKey(live_bettors_table, "key_us");
+  //   console.log("bbbb",bb)
+  let newbots = bb.filter(item => item.cashout_multiplier !== null && item.cashout_multiplier > 0);
+  //   console.log("newbots", newbots);
+  let bots = newjson.concat(newbots)
+
+  //   console.log("bots", bots);
+  let soortedbots = bots.sort((a, b) => b.cashout_multiplier - a.cashout_multiplier);
+  let hthree = soortedbots.slice(0, 3);
+
+  //   console.log("hthree", hthree);
+  const dataArray = [];
+  for (let i = 0; i < hthree.length; i++) {
+    // Create a new object with random values and constant values
+    const dataObject = {
+      ...hthree[i],
+      cashout_multiplier: hthree[i].cashout_multiplier,
+      username: hthree[i].userdata.username
+    };
+
+    // Push the new object into the array
+    dataArray.push(dataObject);
+  }
+  //   console.log("dataArray", dataArray);
+  // saveDummy(dataArray) 
+  callHighestCrasher();
+} 

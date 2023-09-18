@@ -7,9 +7,11 @@ const settings = require('../models/settings');
 const { default: Axios } = require('axios');
 const Transaction = require('../models/Transaction');
 const promowiner = require('../models/promowiner');
-
+const fs = require('fs');
+const filePath = 'top_three_elements.json';
+let minLimit = 2;
 // Function to generate a random integer between min and max (inclusive)
-function getRandomInt(min, max) {
+function getRandomInt(min, max) { 
     const range = max - min + 1;
     return Math.floor(Math.random() * range) + min;
 }
@@ -69,12 +71,11 @@ function checkAuthenticated(req, res, next) {
 
 
 async function getHighestCrasher() {
-    var currentTimestamp = 1694574054000; // Your provided timestamp in milliseconds
+    // 	return [];
+    let gameSettings = await settings.findById(process.env.SETTINGS_ID);
+    var currentTimestamp = gameSettings.lastPromoTime;// 1694671227000; // Your provided timestamp in milliseconds
     var nextHourTimestamp = currentTimestamp + (60 * 60 * 1000); // Add one hour in milliseconds
 
-    // Display the timestamps
-    // console.log(currentTimestamp);
-    // console.log(nextHourTimestamp);
 
     var startDate = new Date(currentTimestamp);
     var endDate = new Date(nextHourTimestamp);
@@ -82,37 +83,27 @@ async function getHighestCrasher() {
     let response = await Bet.aggregate([
         {
             $match: {
-                // createdAt: {
-                //     $gte: specificDate,
-                //     $lt: new Date(specificDate.getTime() + 60 * 60 * 1000) // Add 1 hour to the specific date
-                // }
+                createdAt: {
+                    $gte: startDate,
+                    $lt: endDate // Add 1 hour to the specific date
+                },
+                cashout_multiplier: { $gt: 0 },
+                bet_amount: { $gte: 10 }
             }
         },
         {
-            $sort: { cashout_multiplier: -1 }
+            $sort: { user: 1, cashout_multiplier: -1 } // Sort by user (ascending) and multiplier (descending)
         },
         {
             $group: {
                 _id: "$user",
-                topBets: { $push: "$$ROOT" }
+                topBet: { $first: "$$ROOT" } // Select the document with the highest multiplier for each user
             }
-        },
-        {
-            $project: {
-                _id: 0,
-                user: "$_id",
-                topBets: {
-                    $slice: ["$topBets", 3]
-                }
-            }
-        },
-        {
-            $unwind: "$topBets"
         },
         {
             $lookup: {
                 from: "users", // Replace with the actual name of your "users" collection
-                localField: "user",
+                localField: "_id",
                 foreignField: "_id",
                 as: "userData"
             }
@@ -123,7 +114,7 @@ async function getHighestCrasher() {
         {
             $replaceRoot: {
                 newRoot: {
-                    $mergeObjects: ["$topBets", { user: "$userData" }]
+                    $mergeObjects: ["$topBet", { username: "$userData.username", id: "$userData._id" }]
                 }
             }
         },
@@ -131,10 +122,80 @@ async function getHighestCrasher() {
             $project: {
                 userData: 0
             }
+        },
+        {
+            $sort: { cashout_multiplier: -1 } // Sort the final result by cashout_multiplier in descending order
+        },
+        {
+            $limit: 1 // Limit the result to the top 3 records
         }
-    ]);
-    return response;
- 
+    ])
+    if (gameSettings.allowbots === true) {
+        const jsonData = await readJsonFile(filePath);
+        if (response.length > 0) {
+            try {
+                const topThreeElements = jsonData.slice(0, 2);
+                topThreeElements.push(response[0])
+                let newarray = topThreeElements.sort((a, b) => b.cashout_multiplier - a.cashout_multiplier);
+
+                return newarray;
+            } catch (error) {
+                console.error('Error:', error);
+                throw error;
+            }
+        } else {
+            return jsonData;
+        }
+    } else {
+        return response;
+    }
+
+
+
+}
+
+
+function readJsonFile(filePath) {
+    if (fs.existsSync(filePath)) {
+        return new Promise((resolve, reject) => {
+            fs.readFile(filePath, 'utf8', (err, data) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    try {
+                        const jsonData = JSON.parse(data);
+                        resolve(jsonData);
+                    } catch (parseError) {
+                        reject(parseError);
+                    }
+                }
+            });
+        });
+    } else {
+        console.error(`File '${filePath}' does not exist. reading`);
+    }
+}
+
+
+const saveDummy = (topThreeElements) => {
+
+    // 	if (fs.existsSync(filePath)) {
+    // Convert the topThreeElements array to JSON format
+    const jsonData = JSON.stringify(topThreeElements, null, 2);
+
+    // Write the JSON data to the file
+    fs.writeFile(filePath, jsonData, (err) => {
+        if (err) {
+            console.error('Error writing to file:', err);
+        } else {
+            console.log('Data saved to file:', filePath);
+        }
+    });
+    /*
+        } else {
+            console.error(`File '${filePath}' does not exist. writing`);
+        }
+    */
 }
 
 function getHighestCashoutMultiplier(data) {
@@ -148,21 +209,45 @@ function getHighestCashoutMultiplier(data) {
             : highestObject;
     });
 }
+// Function to generate a random username
+function generateRandomUsername() {
+    // You can customize this function to generate random usernames
+    // For example, you can use a list of possible usernames and pick one randomly
+    const possibleUsernames = ["kariuki", "f19", "wangu", "h254", "Njeri", "Eliz", "john", "nfat", "flet", "patrick", "mwangif", "honest"];
+    const randomIndex = Math.floor(Math.random() * possibleUsernames.length);
+    return possibleUsernames[randomIndex];
+}
+
+// Function to generate a random cashout_multiplier
+function generateRandomCashoutMultiplier(cashout_multiplier) {
+    // Generate a random number between 1 and 2 with two decimal places
+    return parseFloat((Math.random() * (10 - minLimit) + minLimit).toFixed(2));
+}
+
+
 
 async function awardUsers() {
     let highestcrashers = await getHighestCrasher();
     console.log("highestcrashers", highestcrashers);
 
-
-    const max = {
-        _id: "6501bd48e3e1d0b938fbd8da",
-        cashout_multiplier: 1.63,
-        id: "64f1cdc2d8f6bb3c08218a16",
-        username: "fred"
-    };
-
-    // const max = getHighestCashoutMultiplier(highestcrashers)
+    const max = getHighestCashoutMultiplier(highestcrashers)
     console.log("max", max);
+    if (max == null || max.id ==undefined) {
+        let newsettings = await settings.findByIdAndUpdate(
+            {
+                "_id": process.env.SETTINGS_ID
+            },
+            {
+                $set: { lastPromoTime: Date.now() },
+            }, {
+            upsert: true,
+            returnOriginal: false,
+        }); 
+        saveDummy([])
+        console.log("newsettings", newsettings);
+
+        return;
+    }
     let userData = await user.findById({ "_id": max.id });
     console.log("userData", userData);
     if (userData) {
@@ -187,8 +272,6 @@ async function awardUsers() {
                 });
                 transaction.save();
 
-
-
                 const promo = new promowiner({
                     user: userData._id,
                     transaction: transaction._id,
@@ -199,14 +282,41 @@ async function awardUsers() {
                 });
                 promo.save();
 
-                // let response = await callWithdrawApi({
-                //     amount: amount,
-                //     phone: userData.phonenumber,
-                //     transactionId: transaction._id,
-                // })
-                // console.log("response", response); 
+                //reset last promotime
+                let newsettings = await settings.findByIdAndUpdate(
+                    {
+                        "_id": process.env.SETTINGS_ID
+                    },
+                    {
+                        $set: { lastPromoTime: Date.now() },
+                    }, {
+                    upsert: true,
+                    returnOriginal: false,
+                });
+                console.log("newsettings", newsettings);
+
+				saveDummy([])
+                let response = await callWithdrawApi({
+                    amount: amount,
+                    phone: userData.phonenumber,
+                    transactionId: transaction._id,
+                })
+                console.log("response", response);
             }
         }
+    } else {
+        let newsettings = await settings.findByIdAndUpdate(
+            {
+                "_id": process.env.SETTINGS_ID
+            },
+            {
+                $set: { lastPromoTime: Date.now() },
+            }, {
+            upsert: true,
+            returnOriginal: false,
+        });
+        saveDummy([])
+        console.log("newsettings", newsettings);
     }
 }
 
@@ -225,5 +335,9 @@ module.exports = {
     checkAuthenticated,
     getHighestCrasher,
     callWithdrawApi,
-    awardUsers
+    awardUsers,
+    readJsonFile,
+    filePath,
+    saveDummy,
+    generateRandomUsername
 }
