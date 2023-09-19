@@ -1066,8 +1066,6 @@ const loopUpdate = async () => {
       game_phase = false;
       cashout_phase = true;
       phase_start_time = Date.now();
-    } else {
-      io.emit("send_timer", current_multiplier);
     }
     cashOutBots(current_multiplier);
   } else if (cashout_phase) {
