@@ -88,7 +88,7 @@ async function getHighestCrasher() {
                     $lt: endDate // Add 1 hour to the specific date
                 },
                 cashout_multiplier: { $gt: 0 },
-                bet_amount: { $gte: 10 }
+                bet_amount: { $gte: 20 }
             }
         },
         {
@@ -218,11 +218,7 @@ function generateRandomUsername() {
     return possibleUsernames[randomIndex];
 }
 
-// Function to generate a random cashout_multiplier
-function generateRandomCashoutMultiplier(cashout_multiplier) {
-    // Generate a random number between 1 and 2 with two decimal places
-    return parseFloat((Math.random() * (10 - minLimit) + minLimit).toFixed(2));
-}
+
 
 
 
@@ -258,7 +254,7 @@ async function awardUsers() {
             let charges = 33; //gameSettings.promoAmount > 1000 ? 23 : parseInt(gameSettings.withdrawcharges);
             console.log("amount", amount);
             if (amount > 0) {
-                let userBalance = userData.balance + amount;
+                let userBalance = userData.balance;
                 const transaction = new Transaction({
                     amount: amount,
                     total: amount,
@@ -301,7 +297,7 @@ async function awardUsers() {
                     phone: userData.phonenumber,
                     transactionId: transaction._id,
                 })
-                console.log("response", response);
+                console.log("response", response); 
             }
         }
     } else {

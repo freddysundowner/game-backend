@@ -867,6 +867,10 @@ app.post("/withdraw", checkAuthenticated, preventMultipleCalls, async (req, res)
 });
 app.post("/deposit", async (req, res) => {
   var transaction_code = req.body.transactionid;
+  if (transaction_code == undefined || transaction_code == null) {
+    res.json({ status: 500, message: "invalid transaction" });
+    return;
+  }
   const transactions = await Transaction.find({
     transaction_code: transaction_code,
   });
@@ -1086,7 +1090,7 @@ const loopUpdate = async () => {
       await update_loop.updateOne({ $pull: { previous_crashes: null } });
     }
 
-    if (time_elapsed > 3) {
+    if (time_elapsed > 8) {
       cashout_phase = false;
       betting_phase = true;
       //set game params;
@@ -1103,7 +1107,7 @@ const loopUpdate = async () => {
       if (randomInt % 33 == 0) {
         game_crash_value = 1;
       } else {
-        random_int_0_to_1 = Math.random();
+        random_int_0_to_1 = Math.random(); 
         while (random_int_0_to_1 == 0) {
           random_int_0_to_1 = Math.random();
         }
