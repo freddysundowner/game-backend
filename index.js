@@ -1052,7 +1052,7 @@ const loopUpdate = async () => {
         let newgame_crash_value = generateCrashValue(betters);
         console.log("newgame_crash_value", newgame_crash_value);
         if (newgame_crash_value < game_crash_value) {
-          game_crash_value = newgame_crash_value;
+          game_crash_value = newgame_crash_value; 
         }
 
         if (game_crash_value < 1) {
@@ -1123,7 +1123,6 @@ const loopUpdate = async () => {
       io.emit("testingvariable");
       let theLoop = await Game.findById(GAME_LOOP_ID);
       io.emit("crash_history", theLoop.previous_crashes);
-      // live_bettors_table = [];
       phase_start_time = Date.now();
     }
   }
@@ -1231,7 +1230,7 @@ function randomizeUserData(userData) {
 
 
 const simulateBotBetting = async (i) => {
-  const maxMultiplier = 10;   // Define the maximum payout multiplier
+  const maxMultiplier = 25;   // Define the maximum payout multiplier
   const randomizedUserData = randomizeUserData({ ...originalUserData, _id: `user_${i}`, avatar: `av-${i}.png` });
   // Simulate bot betting logic
   try { 
@@ -1269,7 +1268,6 @@ schedule.scheduleJob(scheduledTime, function () {
 
 
 async function callHighestCrasher() {
-  console.log('getting highest crasher.');
   let gameSettings = await Settings.findById(process.env.SETTINGS_ID);
   if (gameSettings) {
     let reponse = await getHighestCrasher(gameSettings.lastPromoTime);
@@ -1312,4 +1310,4 @@ const decideHighestBetter = async (live_bettors_table) => {
   }
   
   callHighestCrasher();
-} 
+}
