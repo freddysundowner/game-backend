@@ -9,6 +9,10 @@ const user = new mongoose.Schema({
     type: String,
     default: null
   },
+  type: {
+    type: String,
+    default: 'user'
+  },
   avatar: {
     type: String,
     default: 'av-1.png'

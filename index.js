@@ -131,7 +131,7 @@ io.on("connection", async (socket) => {
     }
     socket.emit("get_game_status", status);
 
-    callHighestCrasher();
+    // callHighestCrasher();
   });
 
 
@@ -1119,7 +1119,7 @@ const loopUpdate = async () => {
       io.emit("update_user");
       io.emit("start_betting_phase");
 
-      // botBetting()
+      botBetting()
       io.emit("testingvariable");
       let theLoop = await Game.findById(GAME_LOOP_ID);
       io.emit("crash_history", theLoop.previous_crashes);
@@ -1234,7 +1234,7 @@ const simulateBotBetting = async (i) => {
   const maxMultiplier = 10;   // Define the maximum payout multiplier
   const randomizedUserData = randomizeUserData({ ...originalUserData, _id: `user_${i}`, avatar: `av-${i}.png` });
   // Simulate bot betting logic
-  try {
+  try { 
     const botBetInfo = {
       the_user_id: i,
       key_us: true,
@@ -1305,6 +1305,11 @@ const decideHighestBetter = async (live_bettors_table) => {
     dataArray.push(dataObject);
   }
   //   console.log("dataArray", dataArray);
-  // saveDummy(dataArray) 
+  try {
+    saveDummy(dataArray) 
+  } catch (error) {
+    console.log(error);
+  }
+  
   callHighestCrasher();
 } 

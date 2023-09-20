@@ -1,1 +1,56 @@
-[]
+[
+  {
+    "the_user_id": 8,
+    "key_us": true,
+    "bet_amount": 3000,
+    "userdata": {
+      "avatar": "av-8.png",
+      "bet_amount": 3000,
+      "payout_multiplier": 2.411828283571573,
+      "_id": "user_8",
+      "id": "64f1cdc2d8f6bb3c08218a16",
+      "username": "john"
+    },
+    "cashout_multiplier": "10.61",
+    "b_bet_live": false,
+    "payout_multiplier": 10,
+    "profit": 28830,
+    "username": "john"
+  },
+  {
+    "the_user_id": 9,
+    "key_us": true,
+    "bet_amount": 30,
+    "userdata": {
+      "avatar": "av-9.png",
+      "bet_amount": 30,
+      "payout_multiplier": 4.06336737531695,
+      "_id": "user_9",
+      "id": "64f1cdc2d8f6bb3c08218a16",
+      "username": "h254"
+    },
+    "cashout_multiplier": "6.10",
+    "b_bet_live": false,
+    "payout_multiplier": 6,
+    "profit": 153,
+    "username": "h254"
+  },
+  {
+    "the_user_id": 3,
+    "key_us": true,
+    "bet_amount": 2000,
+    "userdata": {
+      "avatar": "av-3.png",
+      "bet_amount": 2000,
+      "payout_multiplier": 9.255639353614662,
+      "_id": "user_3",
+      "id": "64f1cdc2d8f6bb3c08218a16",
+      "username": "nfat"
+    },
+    "cashout_multiplier": "6.09",
+    "b_bet_live": false,
+    "payout_multiplier": 6,
+    "profit": 10180,
+    "username": "nfat"
+  }
+]
